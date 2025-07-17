@@ -97,7 +97,6 @@ export default function QuestsScreen() {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* User Progress */}
         <View style={[styles.progressCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
             
             <View style={styles.progressHeader}>
@@ -118,7 +117,7 @@ export default function QuestsScreen() {
               <View style={styles.statItem}>
                 <Trophy size={20} color={theme.colors.warning} />
                 <Text style={[styles.statValue, { color: theme.colors.text }]}>12</Text>
-                <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>{t('quests')}</Text>
+                <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>{t('questsLabel')}</Text>
               </View>
               <View style={styles.statItem}>
                 <Target size={20} color={theme.colors.success} />
@@ -133,7 +132,6 @@ export default function QuestsScreen() {
             </View>
         </View>
 
-        {/* Achievements */}
         <View style={styles.achievementsSection}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{t('achievements')}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.achievementsContainer}>
@@ -160,13 +158,12 @@ export default function QuestsScreen() {
           </ScrollView>
         </View>
 
-        {/* Quest Tabs */}
         <View style={[styles.tabsContainer, { backgroundColor: theme.colors.surface }]}>
           {[
-            { key: 'active', label: t('active'), count: 1 },
-            { key: 'available', label: t('available'), count: 1 },
-            { key: 'completed', label: t('completed'), count: 1 },
-          ].map((tab) => (
+            { key: 'active', label: t('active'), count: mockQuests.filter(q => q.status === 'active').length },
+            { key: 'available', label: t('available'), count: mockQuests.filter(q => q.status === 'available').length },
+            { key: 'completed', label: t('completed'), count: mockQuests.filter(q => q.status === 'completed').length },
+          ].map((tab, index, arr) => (
             <TouchableOpacity
               key={tab.key}
               style={[
@@ -175,8 +172,8 @@ export default function QuestsScreen() {
                   backgroundColor: selectedTab === tab.key ? theme.colors.primary : 'transparent',
                   borderTopLeftRadius: index === 0 ? 12 : 0,
                   borderBottomLeftRadius: index === 0 ? 12 : 0,
-                  borderTopRightRadius: index === 2 ? 12 : 0,
-                  borderBottomRightRadius: index === 2 ? 12 : 0,
+                  borderTopRightRadius: index === arr.length - 1 ? 12 : 0,
+                  borderBottomRightRadius: index === arr.length - 1 ? 12 : 0,
                 }
               ]}
               onPress={() => setSelectedTab(tab.key)}>
@@ -203,7 +200,6 @@ export default function QuestsScreen() {
           ))}
         </View>
 
-        {/* Quests List */}
         {filteredQuests.map((quest) => (
           <TouchableOpacity key={quest.id} style={[styles.questCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
               
@@ -221,7 +217,7 @@ export default function QuestsScreen() {
                 </View>
               </View>
 
-              <View style={styles.questMeta}>
+              <View style={[styles.questMeta, { borderTopColor: theme.colors.border }]}>
                 <View style={styles.metaRow}>
                   <View style={styles.metaItem}>
                     <Target size={14} color={getDifficultyColor(quest.difficulty)} />
@@ -244,8 +240,8 @@ export default function QuestsScreen() {
               </View>
 
               {quest.status === 'active' && (
-                <View style={styles.progressSection}>
-                  <View style={styles.progressHeader}>
+                <View style={[styles.progressSection, { borderTopColor: theme.colors.border }]}>
+                  <View style={styles.progressSubHeader}>
                     <Text style={[styles.progressLabel, { color: theme.colors.text }]}>{t('progress')}</Text>
                     <Text style={[styles.progressPercentage, { color: theme.colors.primary }]}>{quest.progress}%</Text>
                   </View>
@@ -278,25 +274,25 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingTop: 60,
-    paddingBottom: 24,
+    paddingBottom: 16,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
   },
   headerTitle: {
     fontSize: 32,
     fontWeight: 'bold',
-    marginBottom: 8,
   },
   headerSubtitle: {
     fontSize: 16,
-    marginBottom: 16,
+    marginTop: 4,
   },
   content: {
     flex: 1,
     paddingHorizontal: 20,
+    paddingTop: 24,
   },
   progressCard: {
-    marginBottom: 24,
+    marginBottom: 32,
     borderRadius: 20,
     padding: 20,
     borderWidth: 1,
@@ -352,7 +348,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   achievementsSection: {
-    marginBottom: 24,
+    marginBottom: 32,
   },
   sectionTitle: {
     fontSize: 20,
@@ -360,6 +356,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   achievementsContainer: {
+    paddingRight: 20,
     gap: 12,
   },
   achievementBadge: {
@@ -380,7 +377,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     borderRadius: 16,
     padding: 4,
-    marginBottom: 20,
+    marginBottom: 24,
   },
   tab: {
     flex: 1,
@@ -401,10 +398,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     minWidth: 20,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 4,
   },
   tabBadgeText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
   questCard: {
     marginBottom: 16,
@@ -431,47 +430,57 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   questReward: {
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
   },
   rewardBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
   },
   rewardText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '600',
   },
   questMeta: {
+    borderTopWidth: 1,
+    paddingTop: 16,
     marginBottom: 16,
   },
   metaRow: {
     flexDirection: 'row',
-    gap: 16,
-    marginBottom: 8,
+    alignItems: 'center',
+    marginBottom: 12,
+    flexWrap: 'wrap',
   },
   metaItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
+    marginRight: 16,
   },
   metaText: {
     fontSize: 12,
-    fontWeight: '600',
   },
   participantsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
   },
   participantsText: {
     fontSize: 12,
   },
   progressSection: {
     marginBottom: 16,
+    borderTopWidth: 1,
+    paddingTop: 16,
+  },
+  progressSubHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   progressLabel: {
     fontSize: 14,
@@ -493,8 +502,9 @@ const styles = StyleSheet.create({
   },
   questButton: {
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: 16,
     alignItems: 'center',
+    marginTop: 8,
   },
   questButtonText: {
     color: '#FFFFFF',

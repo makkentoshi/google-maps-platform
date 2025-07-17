@@ -11,11 +11,11 @@ interface Translations {
 
 const translations: Translations = {
   // Navigation
-  camera: { en: 'Camera', ru: ' Камера' },
-  explore: { en: 'Explore', ru: ' Исследовать' },
-  quests: { en: ' Quests', ru: ' Квесты' },
-  profile: { en: ' Profile', ru: ' Профиль' },
-  settings: { en: ' Settings', ru: ' Настройки' },
+  camera: { en: 'Camera', ru: 'Камера' },
+  explore: { en: 'Explore', ru: 'Исследовать' },
+  quests: { en: 'Quests', ru: 'Квесты' },
+  profile: { en: 'Profile', ru: 'Профиль' },
+  settings: { en: 'Settings', ru: 'Настройки' },
 
   // Camera Screen
   cameraAccess: { en: 'Camera Access', ru: 'Доступ к камере' },
@@ -61,7 +61,7 @@ const translations: Translations = {
     ru: 'Исследуйте и зарабатывайте',
   },
   level: { en: 'Level', ru: 'Уровень' },
-  quests: { en: 'Quests', ru: 'Квестов' },
+  questsLabel: { en: 'Quests', ru: 'Квестов' },
   places: { en: 'Places', ru: 'Места' },
   points: { en: 'Points', ru: 'Очков' },
   achievements: { en: 'Achievements', ru: 'Достижения' },

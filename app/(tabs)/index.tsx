@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert } from 'react-native';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Camera, RotateCcw, Image as ImageIcon, Sparkles, Upload } from 'lucide-react-native';
@@ -9,8 +9,10 @@ import * as Location from 'expo-location';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 
-const { width, height } = Dimensions.get('window');
-const API_ENDPOINT = 'https://your-backend-api.vercel.app/api/recognize'; // <-- ЗАМЕНИТЕ НА СВОЙ API
+const { width } = Dimensions.get('window');
+
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
+const API_ENDPOINT = `${API_BASE_URL}/api/recognize`;
 
 export default function CameraScreen() {
   const { theme } = useTheme();
@@ -26,7 +28,6 @@ export default function CameraScreen() {
       requestLocationPermission();
     }
   }, [locationPermission]);
-
 
   if (!cameraPermission || !locationPermission) {
     return <View style={[styles.container, { backgroundColor: theme.colors.background }]} />;
@@ -59,48 +60,43 @@ export default function CameraScreen() {
 
   const processImage = async (base64Image: string) => {
     setIsProcessing(true);
-
     try {
       if (!locationPermission?.granted) {
-          Alert.alert("Location Error", "Location permission is not granted.");
-          setIsProcessing(false);
-          return;
+        Alert.alert("Location Error", "Location permission is not granted.");
+        setIsProcessing(false);
+        return;
       }
-
       const location = await Location.getCurrentPositionAsync({});
       
       const response = await fetch(API_ENDPOINT, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-              image: base64Image,
-              location: {
-                  latitude: location.coords.latitude,
-                  longitude: location.coords.longitude,
-              }
-          })
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image: base64Image,
+          location: {
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+          }
+        })
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to recognize the location.');
-      }
 
       const result = await response.json();
 
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to recognize location.');
+      }
+      
       router.push({
         pathname: '/story',
         params: { data: JSON.stringify(result) }
       });
-
     } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-        Alert.alert('Processing Failed', errorMessage);
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+      Alert.alert('Processing Failed', errorMessage);
     } finally {
-        setIsProcessing(false);
+      setIsProcessing(false);
     }
   };
-
 
   const pickImage = async () => {
     if (isProcessing) return;
@@ -113,85 +109,81 @@ export default function CameraScreen() {
     });
 
     if (!result.canceled && result.assets[0].base64) {
-        await processImage(result.assets[0].base64);
+      await processImage(result.assets[0].base64);
     }
   };
 
   const takePicture = async () => {
     if (!cameraRef.current || isProcessing) return;
-
-    setIsProcessing(true);
     try {
-        const photo = await cameraRef.current.takePictureAsync({
-            quality: 0.7,
-            base64: true,
-        });
-        if(photo && photo.base64) {
-            await processImage(photo.base64);
-        } else {
-           setIsProcessing(false);
-        }
+      const photo = await cameraRef.current.takePictureAsync({
+        quality: 0.7,
+        base64: true,
+      });
+      if(photo && photo.base64) {
+        await processImage(photo.base64);
+      }
     } catch (error) {
-      setIsProcessing(false);
       Alert.alert('Error', 'Failed to take photo');
     }
   };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <CameraView style={styles.camera} facing={facing} ref={cameraRef}>
+      <CameraView style={styles.camera} facing={facing} ref={cameraRef} />
+
+      {/* Overlays positioned absolutely ON TOP of the camera */}
+      <LinearGradient
+        colors={['rgba(0,0,0,0.8)', 'transparent']}
+        style={[styles.topOverlay, styles.overlay]}>
+        <Text style={styles.instructionText}>
+          {t('pointAtLandmark')}
+        </Text>
+      </LinearGradient>
+
+      <View style={styles.frameContainer}>
+        <View style={[styles.frameCorner, { borderColor: theme.colors.primary }]} />
+        <View style={[styles.frameCorner, styles.frameCornerTopRight, { borderColor: theme.colors.primary }]} />
+        <View style={[styles.frameCorner, styles.frameCornerBottomLeft, { borderColor: theme.colors.primary }]} />
+        <View style={[styles.frameCorner, styles.frameCornerBottomRight, { borderColor: theme.colors.primary }]} />
+      </View>
+
+      <View style={[styles.bottomControls, styles.overlay]}>
         <LinearGradient
-          colors={['rgba(0,0,0,0.8)', 'transparent']}
-          style={styles.topOverlay}>
-          <Text style={styles.instructionText}>
-            {t('pointAtLandmark')}
-          </Text>
-        </LinearGradient>
+          colors={['transparent', 'rgba(0,0,0,0.8)']}
+          style={styles.controlsBackground}>
+          
+          <View style={styles.controlsContainer}>
+            <TouchableOpacity style={styles.galleryButton} onPress={pickImage} disabled={isProcessing}>
+              <Upload size={24} color="#FFFFFF" />
+            </TouchableOpacity>
 
-        <View style={styles.bottomControls}>
-          <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.8)']}
-            style={styles.controlsBackground}>
-            
-            <View style={styles.controlsContainer}>
-              <TouchableOpacity style={styles.galleryButton} onPress={pickImage} disabled={isProcessing}>
-                <Upload size={24} color="#FFFFFF" />
-              </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.captureButton, isProcessing && styles.captureButtonActive]}
+              onPress={takePicture}
+              disabled={isProcessing}>
+              {isProcessing ? (
+                <View style={styles.processingIndicator}>
+                  <Sparkles size={32} color={theme.colors.primary} />
+                </View>
+              ) : (
+                <View style={styles.captureButtonInner} />
+              )}
+            </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.captureButton, isProcessing && styles.captureButtonActive]}
-                onPress={takePicture}
-                disabled={isProcessing}>
-                {isProcessing ? (
-                  <View style={styles.processingIndicator}>
-                    <Sparkles size={32} color={theme.colors.primary} />
-                  </View>
-                ) : (
-                  <View style={styles.captureButtonInner} />
-                )}
-              </TouchableOpacity>
+            <TouchableOpacity style={styles.flipButton} onPress={toggleCameraFacing} disabled={isProcessing}>
+              <RotateCcw size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
 
-              <TouchableOpacity style={styles.flipButton} onPress={toggleCameraFacing} disabled={isProcessing}>
-                <RotateCcw size={24} color="#FFFFFF" />
-              </TouchableOpacity>
+          {isProcessing && (
+            <View style={styles.processingContainer}>
+              <Text style={styles.processingText}>{t('recognizingLocation')}</Text>
+              <Text style={styles.processingSubtext}>{t('generatingStory')}</Text>
             </View>
-
-            {isProcessing && (
-              <View style={styles.processingContainer}>
-                <Text style={styles.processingText}>{t('recognizingLocation')}</Text>
-                <Text style={styles.processingSubtext}>{t('generatingStory')}</Text>
-              </View>
-            )}
-          </LinearGradient>
-        </View>
-
-        <View style={styles.frameContainer}>
-          <View style={[styles.frameCorner, { borderColor: theme.colors.primary }]} />
-          <View style={[styles.frameCorner, styles.frameCornerTopRight, { borderColor: theme.colors.primary }]} />
-          <View style={[styles.frameCorner, styles.frameCornerBottomLeft, { borderColor: theme.colors.primary }]} />
-          <View style={[styles.frameCorner, styles.frameCornerBottomRight, { borderColor: theme.colors.primary }]} />
-        </View>
-      </CameraView>
+          )}
+        </LinearGradient>
+      </View>
     </View>
   );
 }
@@ -234,16 +226,18 @@ const styles = StyleSheet.create({
   camera: {
     flex: 1,
   },
+  overlay: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      zIndex: 1,
+  },
   topOverlay: {
-    position: 'absolute',
     top: 0,
-    left: 0,
-    right: 0,
     height: 120,
     justifyContent: 'flex-end',
     alignItems: 'center',
     paddingBottom: 20,
-    zIndex: 1,
   },
   instructionText: {
     color: '#FFFFFF',
@@ -252,10 +246,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   bottomControls: {
-    position: 'absolute',
     bottom: 0,
-    left: 0,
-    right: 0,
     height: 200,
   },
   controlsBackground: {
