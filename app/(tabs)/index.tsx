@@ -67,6 +67,7 @@ export default function CameraScreen() {
         return;
       }
       const location = await Location.getCurrentPositionAsync({});
+      console.log("Requesting URL:", API_ENDPOINT); 
       
       const response = await fetch(API_ENDPOINT, {
         method: 'POST',
@@ -79,6 +80,7 @@ export default function CameraScreen() {
           }
         })
       });
+
 
       const result = await response.json();
 
