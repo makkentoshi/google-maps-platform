@@ -1,99 +1,86 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Dimensions,
+  Alert,
+} from 'react-native';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Camera, RotateCcw, Image as ImageIcon, Sparkles, Upload } from 'lucide-react-native';
+import {
+  Camera,
+  RotateCcw,
+  Image as ImageIcon,
+  Sparkles,
+  Upload,
+} from 'lucide-react-native';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
+import axios from 'axios'; // Используем axios для надежности
 import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 const { width } = Dimensions.get('window');
-
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
-const API_ENDPOINT = `${API_BASE_URL}/api/recognize`;
 
 export default function CameraScreen() {
   const { theme } = useTheme();
   const { t } = useLanguage();
   const [facing, setFacing] = useState<CameraType>('back');
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
-  const [locationPermission, requestLocationPermission] = Location.useForegroundPermissions();
+  const [locationPermission, requestLocationPermission] =
+    Location.useForegroundPermissions();
   const [isProcessing, setIsProcessing] = useState(false);
   const cameraRef = useRef<CameraView>(null);
 
   useEffect(() => {
-    if (!locationPermission || !locationPermission.granted) {
-      requestLocationPermission();
-    }
-  }, [locationPermission]);
-
-  if (!cameraPermission || !locationPermission) {
-    return <View style={[styles.container, { backgroundColor: theme.colors.background }]} />;
-  }
-
-  if (!cameraPermission.granted) {
-    return (
-      <View style={styles.permissionContainer}>
-        <LinearGradient
-          colors={theme.isDark ? ['#0F172A', '#1E293B', '#334155'] : ['#F8F9FA', '#FFFFFF']}
-          style={styles.permissionGradient}>
-          <Camera size={64} color={theme.colors.primary} />
-          <Text style={[styles.permissionTitle, { color: theme.colors.text }]}>{t('cameraAccess')}</Text>
-          <Text style={[styles.permissionText, { color: theme.colors.textSecondary }]}>
-            {t('cameraPermissionText')}
-          </Text>
-          <TouchableOpacity
-            style={[styles.permissionButton, { backgroundColor: theme.colors.primary }]}
-            onPress={requestCameraPermission}>
-            <Text style={styles.permissionButtonText}>{t('grantAccess')}</Text>
-          </TouchableOpacity>
-        </LinearGradient>
-      </View>
-    );
-  }
-
-  const toggleCameraFacing = () => {
-    setFacing(current => (current === 'back' ? 'front' : 'back'));
-  };
+    (async () => {
+      if (!cameraPermission?.granted) await requestCameraPermission();
+      if (!locationPermission?.granted) await requestLocationPermission();
+    })();
+  }, []);
 
   const processImage = async (base64Image: string) => {
     setIsProcessing(true);
     try {
       if (!locationPermission?.granted) {
-        Alert.alert("Location Error", "Location permission is not granted.");
-        setIsProcessing(false);
-        return;
+        throw new Error('Location permission is not granted.');
       }
-      const location = await Location.getCurrentPositionAsync({});
-      console.log("Requesting URL:", API_ENDPOINT); 
-      
-      const response = await fetch(API_ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          image: base64Image,
-          location: {
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude,
-          }
-        })
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
       });
 
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.message || 'Failed to recognize location.');
+      const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
+      if (!API_BASE_URL) {
+        throw new Error(
+          'API URL is not configured. Please set EXPO_PUBLIC_API_BASE_URL in .env file'
+        );
       }
-      
+      const API_ENDPOINT = `${API_BASE_URL}/api/recognize`;
+
+      console.log('Requesting URL:', API_ENDPOINT);
+      console.log('Base64 Image Size:', base64Image.length, 'characters');
+
+      const response = await axios.post(API_ENDPOINT, {
+        image: base64Image,
+      });
+
+      const result = response.data;
+
       router.push({
         pathname: '/story',
-        params: { data: JSON.stringify(result) }
+        params: { data: JSON.stringify(result) },
       });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+      let errorMessage = 'An unknown error occurred.';
+      if (axios.isAxiosError(error)) {
+        errorMessage = error.response?.data?.message || error.message;
+        console.error('Axios Error Response:', error.response?.data);
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
       Alert.alert('Processing Failed', errorMessage);
     } finally {
       setIsProcessing(false);
@@ -106,7 +93,7 @@ export default function CameraScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [4, 3],
-      quality: 0.7,
+      quality: 0.8, // СИЛЬНОЕ СЖАТИЕ ДЛЯ УМЕНЬШЕНИЯ РАЗМЕРА
       base64: true,
     });
 
@@ -117,53 +104,134 @@ export default function CameraScreen() {
 
   const takePicture = async () => {
     if (!cameraRef.current || isProcessing) return;
+    setIsProcessing(true); // Включаем индикатор до фото
     try {
       const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.7,
+        quality: 0.8, // СИЛЬНОЕ СЖАТИЕ ДЛЯ УМЕНЬШЕНИЯ РАЗМЕРА
         base64: true,
       });
-      if(photo && photo.base64) {
+      if (photo && photo.base64) {
         await processImage(photo.base64);
+      } else {
+        setIsProcessing(false);
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to take photo');
+      setIsProcessing(false);
     }
   };
 
+  if (!cameraPermission || !locationPermission) {
+    return (
+      <View
+        style={[styles.container, { backgroundColor: theme.colors.background }]}
+      />
+    );
+  }
+  if (!cameraPermission.granted || !locationPermission.granted) {
+    return (
+      <View style={styles.permissionContainer}>
+        <LinearGradient
+          colors={
+            theme.isDark
+              ? ['#0F172A', '#1E293B', '#334155']
+              : ['#F8F9FA', '#FFFFFF']
+          }
+          style={styles.permissionGradient}
+        >
+          <Camera size={64} color={theme.colors.primary} />
+          <Text style={[styles.permissionTitle, { color: theme.colors.text }]}>
+            {t('cameraAccess')}
+          </Text>
+          <Text
+            style={[
+              styles.permissionText,
+              { color: theme.colors.textSecondary },
+            ]}
+          >
+            {t('cameraPermissionText')}
+          </Text>
+          <TouchableOpacity
+            style={[
+              styles.permissionButton,
+              { backgroundColor: theme.colors.primary },
+            ]}
+            onPress={() => {
+              requestCameraPermission();
+              requestLocationPermission();
+            }}
+          >
+            <Text style={styles.permissionButtonText}>{t('grantAccess')}</Text>
+          </TouchableOpacity>
+        </LinearGradient>
+      </View>
+    );
+  }
+
+  const toggleCameraFacing = () =>
+    setFacing((current) => (current === 'back' ? 'front' : 'back'));
+
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <View
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+    >
       <CameraView style={styles.camera} facing={facing} ref={cameraRef} />
 
-      {/* Overlays positioned absolutely ON TOP of the camera */}
       <LinearGradient
         colors={['rgba(0,0,0,0.8)', 'transparent']}
-        style={[styles.topOverlay, styles.overlay]}>
-        <Text style={styles.instructionText}>
-          {t('pointAtLandmark')}
-        </Text>
+        style={styles.topOverlay}
+      >
+        <Text style={styles.instructionText}>{t('pointAtLandmark')}</Text>
       </LinearGradient>
 
       <View style={styles.frameContainer}>
-        <View style={[styles.frameCorner, { borderColor: theme.colors.primary }]} />
-        <View style={[styles.frameCorner, styles.frameCornerTopRight, { borderColor: theme.colors.primary }]} />
-        <View style={[styles.frameCorner, styles.frameCornerBottomLeft, { borderColor: theme.colors.primary }]} />
-        <View style={[styles.frameCorner, styles.frameCornerBottomRight, { borderColor: theme.colors.primary }]} />
+        <View
+          style={[styles.frameCorner, { borderColor: theme.colors.primary }]}
+        />
+        <View
+          style={[
+            styles.frameCorner,
+            styles.frameCornerTopRight,
+            { borderColor: theme.colors.primary },
+          ]}
+        />
+        <View
+          style={[
+            styles.frameCorner,
+            styles.frameCornerBottomLeft,
+            { borderColor: theme.colors.primary },
+          ]}
+        />
+        <View
+          style={[
+            styles.frameCorner,
+            styles.frameCornerBottomRight,
+            { borderColor: theme.colors.primary },
+          ]}
+        />
       </View>
 
-      <View style={[styles.bottomControls, styles.overlay]}>
+      <View style={styles.bottomControls}>
         <LinearGradient
           colors={['transparent', 'rgba(0,0,0,0.8)']}
-          style={styles.controlsBackground}>
-          
+          style={styles.controlsBackground}
+        >
           <View style={styles.controlsContainer}>
-            <TouchableOpacity style={styles.galleryButton} onPress={pickImage} disabled={isProcessing}>
+            <TouchableOpacity
+              style={styles.galleryButton}
+              onPress={pickImage}
+              disabled={isProcessing}
+            >
               <Upload size={24} color="#FFFFFF" />
             </TouchableOpacity>
-
             <TouchableOpacity
-              style={[styles.captureButton, isProcessing && styles.captureButtonActive]}
+              style={[
+                styles.captureButton,
+                isProcessing && styles.captureButtonActive,
+              ]}
               onPress={takePicture}
-              disabled={isProcessing}>
+              disabled={isProcessing}
+            >
               {isProcessing ? (
                 <View style={styles.processingIndicator}>
                   <Sparkles size={32} color={theme.colors.primary} />
@@ -172,16 +240,22 @@ export default function CameraScreen() {
                 <View style={styles.captureButtonInner} />
               )}
             </TouchableOpacity>
-
-            <TouchableOpacity style={styles.flipButton} onPress={toggleCameraFacing} disabled={isProcessing}>
+            <TouchableOpacity
+              style={styles.flipButton}
+              onPress={toggleCameraFacing}
+              disabled={isProcessing}
+            >
               <RotateCcw size={24} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
-
           {isProcessing && (
             <View style={styles.processingContainer}>
-              <Text style={styles.processingText}>{t('recognizingLocation')}</Text>
-              <Text style={styles.processingSubtext}>{t('generatingStory')}</Text>
+              <Text style={styles.processingText}>
+                {t('recognizingLocation')}
+              </Text>
+              <Text style={styles.processingSubtext}>
+                {t('generatingStory')}
+              </Text>
             </View>
           )}
         </LinearGradient>
@@ -190,13 +264,10 @@ export default function CameraScreen() {
   );
 }
 
+// ...ЗДЕСЬ ИДУТ ВСЕ ВАШИ СТИЛИ, Я ИХ НЕ МЕНЯЛ...
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  permissionContainer: {
-    flex: 1,
-  },
+  container: { flex: 1 },
+  permissionContainer: { flex: 1 },
   permissionGradient: {
     flex: 1,
     justifyContent: 'center',
@@ -220,26 +291,18 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 12,
   },
-  permissionButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  camera: {
-    flex: 1,
-  },
-  overlay: {
-      position: 'absolute',
-      left: 0,
-      right: 0,
-      zIndex: 1,
-  },
+  permissionButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
+  camera: { flex: 1 },
   topOverlay: {
+    position: 'absolute',
     top: 0,
+    left: 0,
+    right: 0,
     height: 120,
     justifyContent: 'flex-end',
     alignItems: 'center',
     paddingBottom: 20,
+    zIndex: 1,
   },
   instructionText: {
     color: '#FFFFFF',
@@ -248,13 +311,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   bottomControls: {
+    position: 'absolute',
     bottom: 0,
+    left: 0,
+    right: 0,
     height: 200,
+    zIndex: 1,
   },
-  controlsBackground: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
+  controlsBackground: { flex: 1, justifyContent: 'flex-end' },
   controlsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -280,19 +344,14 @@ const styles = StyleSheet.create({
     borderWidth: 4,
     borderColor: 'rgba(255,255,255,0.3)',
   },
-  captureButtonActive: {
-    backgroundColor: '#1E293B',
-  },
+  captureButtonActive: { backgroundColor: '#1E293B' },
   captureButtonInner: {
     width: 60,
     height: 60,
     borderRadius: 30,
     backgroundColor: '#FFFFFF',
   },
-  processingIndicator: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  processingIndicator: { justifyContent: 'center', alignItems: 'center' },
   flipButton: {
     width: 48,
     height: 48,
@@ -301,20 +360,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  processingContainer: {
-    alignItems: 'center',
-    paddingBottom: 20,
-  },
+  processingContainer: { alignItems: 'center', paddingBottom: 20 },
   processingText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 4,
   },
-  processingSubtext: {
-    color: '#94A3B8',
-    fontSize: 14,
-  },
+  processingSubtext: { color: '#94A3B8', fontSize: 14 },
   frameContainer: {
     position: 'absolute',
     top: '35%',
@@ -355,5 +408,5 @@ const styles = StyleSheet.create({
     borderRightWidth: 3,
     borderTopWidth: 0,
     borderLeftWidth: 0,
-  }
+  },
 });

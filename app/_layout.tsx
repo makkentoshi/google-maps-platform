@@ -4,18 +4,21 @@ import { StatusBar } from 'expo-status-bar';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { LanguageProvider } from '@/contexts/LanguageContext';
+import { ClerkProvider } from '@clerk/clerk-expo';
+import { tokenCache } from '@clerk/clerk-expo/token-cache';
+import { Slot } from 'expo-router';
 
 export default function RootLayout() {
   useFrameworkReady();
 
   return (
-    <ThemeProvider>
-      <LanguageProvider>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="+not-found" />
-        </Stack>
-        <StatusBar style="auto" />
-      </LanguageProvider>
-    </ThemeProvider>
+    <ClerkProvider tokenCache={tokenCache}>
+      <ThemeProvider>
+        <LanguageProvider>
+          <Slot />
+          <StatusBar style="auto" />
+        </LanguageProvider>
+      </ThemeProvider>
+    </ClerkProvider>
   );
 }
