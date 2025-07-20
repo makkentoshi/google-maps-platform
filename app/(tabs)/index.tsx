@@ -19,9 +19,10 @@ import {
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import axios from 'axios'; // Используем axios для надежности
 import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
+import axios from 'axios'; // Используем axios для надежности
+import * as ImageManipulator from 'expo-image-manipulator';
 
 const { width } = Dimensions.get('window');
 
@@ -87,37 +88,68 @@ export default function CameraScreen() {
     }
   };
 
+  const handleImagePicked = async (uri: string) => {
+    setIsProcessing(true);
+    try {
+      // Уменьшаем изображение до максимальной ширины 1280px, сохраняя пропорции,
+      // а затем сжимаем его с качеством 0.7
+      const manipulatedImage = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: 1280 } }], // Уменьшаем размер до веб-оптимального
+        {
+          compress: 0.7,
+          format: ImageManipulator.SaveFormat.JPEG,
+          base64: true,
+        }
+      );
+
+      if (manipulatedImage.base64) {
+        await processImage(manipulatedImage.base64);
+      } else {
+        setIsProcessing(false);
+        Alert.alert(t('errorTitle', 'Error'), 'Failed to process image.');
+      }
+    } catch (error) {
+      setIsProcessing(false);
+      Alert.alert(
+        t('errorTitle', 'Error'),
+        'An error occurred while processing the image.'
+      );
+      console.error('Image Manipulation Error:', error);
+    }
+  };
+
   const pickImage = async () => {
     if (isProcessing) return;
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.65, // СИЛЬНОЕ СЖАТИЕ ДЛЯ УМЕНЬШЕНИЯ РАЗМЕРА
-      base64: true,
+      allowsEditing: false, // Отключаем, так как сами будем обрабатывать
+      quality: 1, // Берем из галереи в максимальном качестве
+      base64: false, // Не тратим ресурсы на первоначальный base64
     });
 
-    if (!result.canceled && result.assets[0].base64) {
-      await processImage(result.assets[0].base64);
+    if (!result.canceled && result.assets?.[0]?.uri) {
+      await handleImagePicked(result.assets[0].uri);
     }
   };
 
   const takePicture = async () => {
     if (!cameraRef.current || isProcessing) return;
-    setIsProcessing(true); // Включаем индикатор до фото
+    setIsProcessing(true);
     try {
-      const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.65, // СИЛЬНОЕ СЖАТИЕ ДЛЯ УМЕНЬШЕНИЯ РАЗМЕРА
-        base64: true,
-      });
-      if (photo && photo.base64) {
-        await processImage(photo.base64);
+      const photo = await cameraRef.current.takePictureAsync({ quality: 1 });
+
+      if (photo?.uri) {
+        await handleImagePicked(photo.uri);
       } else {
         setIsProcessing(false);
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to take photo');
       setIsProcessing(false);
+      Alert.alert(
+        t('errorTitle', 'Error'),
+        t('errorTakePhoto', 'Failed to take photo')
+      );
     }
   };
 
@@ -175,7 +207,12 @@ export default function CameraScreen() {
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
-      <CameraView style={styles.camera} facing={facing} ref={cameraRef} />
+      <CameraView
+        style={styles.camera}
+        facing={facing}
+        ref={cameraRef}
+        zoom={0}
+      />
 
       <LinearGradient
         colors={['rgba(0,0,0,0.8)', 'transparent']}
