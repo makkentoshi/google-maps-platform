@@ -19,30 +19,15 @@ const translations: Translations = {
 
   // Camera Screen
   cameraAccess: { en: 'Camera Access', ru: 'Доступ к камере' },
-  cameraPermissionText: {
-    en: 'We need camera access to recognize places and create stories',
-    ru: 'Для распознавания мест и создания историй нужен доступ к камере',
-  },
+  cameraPermissionText: { en: 'We need camera access to recognize places and create stories', ru: 'Для распознавания мест и создания историй нужен доступ к камере' },
   grantAccess: { en: 'Grant Access', ru: 'Предоставить доступ' },
-  pointAtLandmark: {
-    en: 'Point camera at a landmark',
-    ru: 'Наведите камеру на достопримечательность',
-  },
-  recognizingLocation: {
-    en: 'Recognizing location...',
-    ru: 'Распознаю локацию...',
-  },
-  generatingStory: {
-    en: 'Generating story with AI',
-    ru: 'Генерирую историю с помощью AI',
-  },
+  pointAtLandmark: { en: 'Point camera at a landmark', ru: 'Наведите камеру на достопримечательность' },
+  recognizingLocation: { en: 'Recognizing location...', ru: 'Распознаю локацию...' },
+  generatingStory: { en: 'Generating story with AI', ru: 'Генерирую историю с помощью AI' },
   attachPhoto: { en: 'Attach Photo', ru: 'Прикрепить фото' },
 
   // Explore Screen
-  exploreSubtitle: {
-    en: 'Discover stories around you',
-    ru: 'Откройте истории вокруг вас',
-  },
+  exploreSubtitle: { en: 'Discover stories around you', ru: 'Откройте истории вокруг вас' },
   all: { en: 'All', ru: 'Все' },
   architecture: { en: 'Architecture', ru: 'Архитектура' },
   parks: { en: 'Parks', ru: 'Парки' },
@@ -56,10 +41,7 @@ const translations: Translations = {
   learnStory: { en: 'Learn Story', ru: 'Узнать историю' },
 
   // Quests Screen
-  questsSubtitle: {
-    en: 'Explore and earn rewards',
-    ru: 'Исследуйте и зарабатывайте',
-  },
+  questsSubtitle: { en: 'Explore and earn rewards', ru: 'Исследуйте и зарабатывайте' },
   level: { en: 'Level', ru: 'Уровень' },
   questsLabel: { en: 'Quests', ru: 'Квестов' },
   places: { en: 'Places', ru: 'Места' },
@@ -101,44 +83,47 @@ const translations: Translations = {
   about: { en: 'About', ru: 'О приложении' },
   version: { en: 'Version', ru: 'Версия' },
   support: { en: 'Support', ru: 'Поддержка' },
-
-  // Story Screen
-  readTime: { en: 'min read', ru: 'мин чтения' },
-  story: { en: 'Story', ru: 'История' },
-  popular: { en: 'Popular', ru: 'Популярное' },
-  interestingFacts: { en: 'Interesting Facts', ru: 'Интересные факты' },
+  
+  // --- Story Screen (Additions) ---
+  story: { en: 'Full Story', ru: 'Полная история' },
+  summary: { en: 'Summary', ru: 'Краткое содержание'},
   share: { en: 'Share', ru: 'Поделиться' },
+  interestingFacts: { en: 'Interesting Facts', ru: 'Интересные факты' },
   relatedQuests: { en: 'Related Quests', ru: 'Связанные квесты' },
-  allQuests: { en: 'All Quests', ru: 'Все квесты' },
   start: { en: 'Start', ru: 'Начать' },
-  retakePhoto: { en: 'Retake Photo', ru: 'Переснять' },
-  currentLocation: { en: 'Current Location', ru: 'Текущее местоположение' },
+  enhanceCta: { en: 'Generate Full Story', ru: 'Создать полную историю'},
+  commentsTitle: { en: 'Leave a Comment', ru: 'Оставить комментарий' },
+  commentsPlaceholder: { en: 'Share your thoughts...', ru: 'Поделитесь мыслями...' },
+  commentsPost: { en: 'Post', ru: 'Опубликовать' },
 
-  // Common
-  min: { en: 'min', ru: 'мин' },
-  km: { en: 'km', ru: 'км' },
-  hoursAgo: { en: 'hours ago', ru: 'часов назад' },
-  dayAgo: { en: 'day ago', ru: 'день назад' },
-  daysAgo: { en: 'days ago', ru: 'дня назад' },
+  // Error Messages
+  errorTitle: { en: 'Error', ru: 'Ошибка'},
+  errorLoadStory: { en: 'Failed to load story data.', ru: 'Не удалось загрузить историю.' },
+  errorEnhanceStory: { en: 'Failed to generate story.', ru: 'Не удалось сгенерировать историю.' },
+  errorSharing: { en: 'Sharing failed.', ru: 'Не удалось поделиться.'},
+  errorLikeUpdate: { en: 'Failed to update like status.', ru: 'Не удалось обновить статус лайка.'},
+  errorCommentPost: { en: 'Failed to post comment.', ru: 'Не удалось опубликовать комментарий.'}
 };
 
 interface LanguageContextType {
   language: Language;
   setLanguage: (lang: Language) => void;
-  t: (key: string) => string;
+  t: (key: string, fallback?: string, options?: any) => string;
 }
 
-const LanguageContext = createContext<LanguageContextType | undefined>(
-  undefined
-);
+const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
-export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({
-  children,
-}) => {
+export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [language, setLanguage] = useState<Language>('en');
 
-  const t = (key: string): string => {
-    return translations[key]?.[language] || key;
+  const t = (key: string, fallback?: string, options?: any): string => {
+    let translation = translations[key]?.[language] || fallback || key;
+    if (options) {
+      Object.keys(options).forEach(optKey => {
+        translation = translation.replace(`{{${optKey}}}`, options[optKey]);
+      });
+    }
+    return translation;
   };
 
   return (

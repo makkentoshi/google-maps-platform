@@ -6,21 +6,26 @@
   "scripts": {
     "dev": "EXPO_NO_TELEMETRY=1 expo start",
     "build:web": "expo export --platform web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "dependencies": {
     "@clerk/clerk-expo": "^2.14.9",
+    "@expo/ngrok": "^4.1.3",
     "@expo/vector-icons": "^14.1.0",
     "@lucide/lab": "^0.1.2",
     "@react-navigation/bottom-tabs": "^7.2.0",
     "@react-navigation/native": "^7.0.14",
     "axios": "^1.10.0",
     "expo": "^53.0.0",
+    "expo-auth-session": "~6.2.1",
     "expo-blur": "~14.1.3",
     "expo-camera": "~16.1.5",
     "expo-constants": "~17.1.3",
     "expo-font": "~13.2.2",
     "expo-haptics": "~14.1.3",
+    "expo-image-manipulator": "~13.1.7",
     "expo-image-picker": "^16.1.4",
     "expo-linear-gradient": "~14.1.3",
     "expo-linking": "~7.1.3",
@@ -49,6 +54,7 @@
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@types/react": "~19.0.10",
+    "@types/react-native": "^0.72.8",
     "typescript": "~5.8.3"
   }
 }

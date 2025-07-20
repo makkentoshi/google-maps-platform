@@ -93,7 +93,7 @@ export default function CameraScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [4, 3],
-      quality: 0.8, // СИЛЬНОЕ СЖАТИЕ ДЛЯ УМЕНЬШЕНИЯ РАЗМЕРА
+      quality: 0.65, // СИЛЬНОЕ СЖАТИЕ ДЛЯ УМЕНЬШЕНИЯ РАЗМЕРА
       base64: true,
     });
 
@@ -107,7 +107,7 @@ export default function CameraScreen() {
     setIsProcessing(true); // Включаем индикатор до фото
     try {
       const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.8, // СИЛЬНОЕ СЖАТИЕ ДЛЯ УМЕНЬШЕНИЯ РАЗМЕРА
+        quality: 0.65, // СИЛЬНОЕ СЖАТИЕ ДЛЯ УМЕНЬШЕНИЯ РАЗМЕРА
         base64: true,
       });
       if (photo && photo.base64) {

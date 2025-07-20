@@ -3,6 +3,7 @@ import { Camera, Map, User, Trophy, Settings } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { SignedIn, SignedOut } from '@clerk/clerk-expo';
+import { View, Text } from 'react-native';
 
 export default function TabLayout() {
   const { theme } = useTheme();
@@ -83,19 +84,6 @@ export default function TabLayout() {
           />
         </Tabs>
       </SignedIn>
-      <SignedOut>
-        {/* You can replace this with a redirect or a sign-in screen */}
-        <div
-          style={{
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center',
-            padding: 40,
-          }}
-        >
-          <p>Please sign in to access the app.</p>
-        </div>
-      </SignedOut>
     </>
   );
 }
