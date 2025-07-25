@@ -23,6 +23,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import axios from 'axios';
 import * as ImageManipulator from 'expo-image-manipulator';
+import PhotoProcessingLoader from '@/app/components/PhotoProcessingLoader';
 
 const { width } = Dimensions.get('window');
 
@@ -247,6 +248,11 @@ export default function CameraScreen() {
           ]}
         />
       </View>
+      {isProcessing && (
+        <View style={styles.loaderContainer}>
+          <PhotoProcessingLoader visible={isProcessing} />
+        </View>
+      )}
 
       <View style={styles.bottomControls}>
         <LinearGradient
@@ -285,16 +291,6 @@ export default function CameraScreen() {
               <RotateCcw size={24} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
-          {isProcessing && (
-            <View style={styles.processingContainer}>
-              <Text style={styles.processingText}>
-                {t('recognizingLocation')}
-              </Text>
-              <Text style={styles.processingSubtext}>
-                {t('generatingStory')}
-              </Text>
-            </View>
-          )}
         </LinearGradient>
       </View>
     </View>
@@ -309,6 +305,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
+  },
+  loaderContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
   },
   permissionTitle: {
     fontSize: 24,

@@ -13,6 +13,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import {
@@ -34,6 +35,8 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@clerk/clerk-expo';
 import axios from 'axios';
+import TextGenerationLoader from '@/app/components/TextGenerationLoader';
+import CommentSection from '@/app/components/CommentSection';
 
 // Mock TTS for Expo Go; replace with `import Tts from 'react-native-tts'` in development build
 const Tts = {
@@ -97,6 +100,7 @@ export default function StoryScreen() {
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [isPlayingTts, setIsPlayingTts] = useState(false);
   const [selectedStyle, setSelectedStyle] = useState('narrative');
+  const [showLikeAnimation, setShowLikeAnimation] = useState(false);
 
   useEffect(() => {
     setIsLiked(storyData?.isLiked ?? false);
@@ -162,24 +166,34 @@ export default function StoryScreen() {
   };
 
   const handleLike = async () => {
-    if (storyData?.source !== 'database' || !storyData.storyId || !userId)
+    if (storyData?.source !== 'database' || !storyData.storyId || !userId) {
+      Alert.alert(
+        t('errorTitle', 'Error'),
+        t('errorLikeUpdate', 'Cannot like this story.')
+      );
       return;
+    }
     const originalLiked = isLiked;
     setIsLiked(!originalLiked);
     setLikesCount((prev) => (originalLiked ? prev - 1 : prev + 1));
     try {
-      await axios({
+      const response = await axios({
         method: originalLiked ? 'DELETE' : 'POST',
         url: `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/stories/${storyData.storyId}/like`,
         data: { userClerkId: userId },
       });
+      if (response.status === 201 || response.status === 200) {
+        setShowLikeAnimation(true);
+        setTimeout(() => setShowLikeAnimation(false), 1000);
+      }
     } catch (error: any) {
       console.error('Like error:', error.response?.data || error.message);
       setIsLiked(originalLiked);
       setLikesCount((prev) => (originalLiked ? prev + 1 : prev - 1));
       Alert.alert(
         t('errorTitle', 'Error'),
-        t('errorLikeUpdate', 'Failed to update like status.')
+        error.response?.data?.message ||
+          t('errorLikeUpdate', 'Failed to update like status.')
       );
     }
   };
@@ -191,11 +205,16 @@ export default function StoryScreen() {
       !storyData.storyId ||
       !userId ||
       !commentText.trim()
-    )
+    ) {
+      Alert.alert(
+        t('errorTitle', 'Error'),
+        t('errorComment', 'Cannot post comment.')
+      );
       return;
+    }
     try {
       await axios.post(
-        `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/stories/${storyData.storyId}/comments`,
+        `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/stories/${storyData.storyId}/comment`,
         { userClerkId: userId, text: commentText }
       );
       setCommentsCount((prev) => prev + 1);
@@ -203,7 +222,35 @@ export default function StoryScreen() {
       setCommentModalVisible(false);
     } catch (error: any) {
       console.error('Comment error:', error.response?.data || error.message);
-      Alert.alert(t('errorTitle', 'Error'), 'Failed to post comment.');
+      Alert.alert(
+        t('errorTitle', 'Error'),
+        error.response?.data?.message ||
+          t('errorComment', 'Failed to post comment.')
+      );
+    }
+  };
+
+  const handleSourcePress = async (url: string) => {
+    try {
+      const validUrl =
+        url.startsWith('http://') || url.startsWith('https://')
+          ? url
+          : `https://${url}`;
+      const supported = await Linking.canOpenURL(validUrl);
+      if (supported) {
+        await Linking.openURL(validUrl);
+      } else {
+        Alert.alert(
+          t('errorTitle', 'Error'),
+          t('errorInvalidUrl', 'Cannot open this URL.')
+        );
+      }
+    } catch (error: any) {
+      console.error('Source link error:', error.message);
+      Alert.alert(
+        t('errorTitle', 'Error'),
+        t('errorInvalidUrl', 'Invalid URL.')
+      );
     }
   };
 
@@ -356,6 +403,12 @@ export default function StoryScreen() {
           </Text>
         </View>
 
+        {isEnhancing && (
+          <View style={styles.loaderContainer}>
+            <TextGenerationLoader visible={isEnhancing} />
+          </View>
+        )}
+
         {storyData.funFacts && storyData.funFacts.length > 0 && (
           <View style={styles.factsSection}>
             <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
@@ -387,15 +440,23 @@ export default function StoryScreen() {
               {t('sources', 'Sources')}
             </Text>
             {storyData.sources.map((source, index) => (
-              <Text
+              <TouchableOpacity
                 key={index}
                 style={[
-                  styles.sourceText,
-                  { color: theme.colors.textSecondary },
+                  styles.sourceButton,
+                  {
+                    backgroundColor: theme.colors.card,
+                    borderColor: theme.colors.border,
+                  },
                 ]}
+                onPress={() => handleSourcePress(source)}
               >
-                {source}
-              </Text>
+                <Text
+                  style={[styles.sourceText, { color: theme.colors.primary }]}
+                >
+                  {source}
+                </Text>
+              </TouchableOpacity>
             ))}
           </View>
         )}
@@ -438,18 +499,7 @@ export default function StoryScreen() {
                 ]}
                 onPress={handleEnhance}
                 disabled={isEnhancing}
-              >
-                {isEnhancing ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <>
-                    <Zap size={20} color="#fff" />
-                    <Text style={styles.enhanceButtonText}>
-                      {t('enhanceCta', 'Generate Full Story')}
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
+              ></TouchableOpacity>
             </>
           )}
 
@@ -579,44 +629,78 @@ export default function StoryScreen() {
         visible={isCommentModalVisible}
         onRequestClose={() => setCommentModalVisible(false)}
       >
-        <TouchableOpacity
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
-          activeOpacity={1}
-          onPressOut={() => setCommentModalVisible(false)}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
         >
           <TouchableOpacity
-            style={[
-              styles.modalContent,
-              { backgroundColor: theme.colors.card },
-            ]}
+            style={styles.modalOverlay}
             activeOpacity={1}
+            onPressOut={() => setCommentModalVisible(false)}
           >
-            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
-              {t('commentsTitle', 'Leave a Comment')}
-            </Text>
-            <TextInput
-              style={[
-                styles.commentInput,
-                { borderColor: theme.colors.border, color: theme.colors.text },
-              ]}
-              placeholder={t('commentsPlaceholder', 'Share your thoughts...')}
-              placeholderTextColor={theme.colors.textSecondary}
-              multiline
-              value={commentText}
-              onChangeText={setCommentText}
-              autoFocus={true}
-            />
             <TouchableOpacity
               style={[
-                styles.postButton,
-                { backgroundColor: theme.colors.primary },
+                styles.modalContent,
+                { backgroundColor: theme.colors.card },
               ]}
-              onPress={handlePostComment}
+              activeOpacity={1}
             >
-              <Text style={styles.buttonText}>{t('commentsPost', 'Post')}</Text>
+              <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
+                {t('commentsTitle', 'Leave a Comment')}
+              </Text>
+              <ScrollView
+                style={styles.modalScroll}
+                keyboardShouldPersistTaps="handled"
+              >
+                <TextInput
+                  style={[
+                    styles.commentInput,
+                    {
+                      borderColor: theme.colors.border,
+                      color: theme.colors.text,
+                    },
+                  ]}
+                  placeholder={t(
+                    'commentsPlaceholder',
+                    'Share your thoughts...'
+                  )}
+                  placeholderTextColor={theme.colors.textSecondary}
+                  multiline
+                  value={commentText}
+                  onChangeText={setCommentText}
+                  autoFocus={true}
+                />
+              </ScrollView>
+              <TouchableOpacity
+                style={[
+                  styles.postButton,
+                  { backgroundColor: theme.colors.primary },
+                ]}
+                onPress={handlePostComment}
+              >
+                <Text style={styles.buttonText}>
+                  {t('commentsPost', 'Post')}
+                </Text>
+              </TouchableOpacity>
             </TouchableOpacity>
           </TouchableOpacity>
-        </TouchableOpacity>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showLikeAnimation}
+        onRequestClose={() => setShowLikeAnimation(false)}
+      >
+        <View style={styles.likeAnimationOverlay}>
+          <Heart
+            size={100}
+            color={theme.colors.error}
+            fill={theme.colors.error}
+          />
+        </View>
       </Modal>
     </KeyboardAvoidingView>
   );
@@ -634,6 +718,16 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 16,
     lineHeight: 36,
+  },
+  loaderContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
   },
   locationInfo: {
     flexDirection: 'row',
@@ -671,7 +765,19 @@ const styles = StyleSheet.create({
   factIcon: { marginRight: 12, marginTop: 4 },
   factText: { flex: 1, fontSize: 16, lineHeight: 24 },
   sourcesSection: { paddingHorizontal: 20, marginBottom: 32 },
-  sourceText: { fontSize: 14, lineHeight: 22, marginBottom: 8 },
+  sourceButton: {
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 8,
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0', // Light background for button-like appearance
+  },
+  sourceText: {
+    fontSize: 14,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
   interactionSection: { paddingHorizontal: 20, marginBottom: 32 },
   interactionCard: {
     borderRadius: 16,
@@ -732,7 +838,9 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     padding: 24,
     paddingBottom: 40,
+    maxHeight: '80%',
   },
+  modalScroll: { maxHeight: 200 },
   modalTitle: {
     fontSize: 22,
     fontWeight: 'bold',
@@ -746,14 +854,20 @@ const styles = StyleSheet.create({
     padding: 16,
     fontSize: 16,
     textAlignVertical: 'top',
+    marginBottom: 16,
   },
   postButton: {
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
-    marginTop: 16,
     height: 52,
     justifyContent: 'center',
   },
   buttonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  likeAnimationOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
 });

@@ -45,6 +45,7 @@
     "react-dom": "19.0.0",
     "react-native": "0.79.5",
     "react-native-gesture-handler": "~2.24.0",
+    "react-native-map-clustering": "^4.0.0",
     "react-native-maps": "1.20.1",
     "react-native-picker-select": "^9.3.1",
     "react-native-reanimated": "~3.17.4",
