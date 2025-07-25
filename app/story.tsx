@@ -1,5 +1,3 @@
-// Файл: app/story.tsx
-
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   View,
@@ -16,30 +14,40 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
 import {
-  ArrowLeft,
-  MapPin,
-  Clock,
+  Zap,
   Heart,
   MessageCircle,
   Share2,
+  Clock,
   BookOpen,
-  Users,
+  MapPin,
   Star,
   Target,
-  Zap,
+  Play,
+  Pause,
 } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import MapView, { Marker } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@clerk/clerk-expo';
 import axios from 'axios';
 
+// Mock TTS for Expo Go; replace with `import Tts from 'react-native-tts'` in development build
+const Tts = {
+  setDefaultLanguage: (lang: string) =>
+    console.log(`Mock TTS: Setting language to ${lang}`),
+  speak: (text: string) =>
+    console.log(`Mock TTS: Speaking - ${text.substring(0, 50)}...`),
+  stop: () => console.log('Mock TTS: Stopped'),
+};
+
 const { width } = Dimensions.get('window');
 
 type StoryData = {
-  source: 'database' | 'wikipedia';
+  source: 'database' | 'generated';
   storyId?: string;
   title: string;
   story: string;
@@ -51,6 +59,12 @@ type StoryData = {
   likes?: number;
   comments?: number;
   isLiked?: boolean;
+  country?: string;
+  city?: string;
+  distance?: string;
+  style?: string;
+  sources?: string[];
+  isEnhanced?: boolean;
 };
 
 export default function StoryScreen() {
@@ -63,7 +77,6 @@ export default function StoryScreen() {
   const [storyData, setStoryData] = useState<StoryData | null>(() => {
     if (params.data && typeof params.data === 'string') {
       try {
-        // Fix: robust JSON extraction if needed
         const rawText = params.data as string;
         const jsonMatch = rawText.match(/\{[\s\S]*\}/);
         if (!jsonMatch) throw new Error('No JSON found in the text');
@@ -82,12 +95,17 @@ export default function StoryScreen() {
   const [isCommentModalVisible, setCommentModalVisible] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [isEnhancing, setIsEnhancing] = useState(false);
+  const [isPlayingTts, setIsPlayingTts] = useState(false);
+  const [selectedStyle, setSelectedStyle] = useState('narrative');
 
   useEffect(() => {
     setIsLiked(storyData?.isLiked ?? false);
-    console.log('Initial isLiked:', storyData?.isLiked);
     setLikesCount(storyData?.likes ?? 0);
     setCommentsCount(storyData?.comments ?? 0);
+    Tts.setDefaultLanguage('en-US');
+    return () => {
+      Tts.stop();
+    };
   }, [storyData]);
 
   const coordinates = useMemo(() => {
@@ -103,7 +121,8 @@ export default function StoryScreen() {
   }, [storyData?.coordinates]);
 
   const handleEnhance = useCallback(async () => {
-    if (!storyData || storyData.source !== 'wikipedia') return;
+    if (!storyData || storyData.source !== 'generated' || storyData.isEnhanced)
+      return;
     setIsEnhancing(true);
     try {
       const response = await axios.post(
@@ -112,15 +131,23 @@ export default function StoryScreen() {
           placeName: storyData.location,
           initialText: storyData.story,
           coordinates: storyData.coordinates,
+          style: selectedStyle,
         }
       );
       setStoryData(response.data);
-    } catch (error) {
-      Alert.alert(t('errorTitle'), t('errorEnhanceStory'));
+    } catch (error: any) {
+      console.error(
+        'Enhance story error:',
+        error.response?.data || error.message
+      );
+      Alert.alert(
+        t('errorTitle', 'Error'),
+        t('errorEnhanceStory', 'Failed to generate story.')
+      );
     } finally {
       setIsEnhancing(false);
     }
-  }, [storyData, t]);
+  }, [storyData, selectedStyle, t]);
 
   const handleShare = async () => {
     if (!storyData) return;
@@ -128,8 +155,9 @@ export default function StoryScreen() {
       await Share.share({
         message: `Check out this story about ${storyData.title} in the Storytelling App!`,
       });
-    } catch (error) {
-      Alert.alert('Sharing failed.');
+    } catch (error: any) {
+      console.error('Share error:', error.message);
+      Alert.alert(t('errorTitle', 'Error'), 'Sharing failed.');
     }
   };
 
@@ -145,10 +173,14 @@ export default function StoryScreen() {
         url: `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/stories/${storyData.storyId}/like`,
         data: { userClerkId: userId },
       });
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Like error:', error.response?.data || error.message);
       setIsLiked(originalLiked);
       setLikesCount((prev) => (originalLiked ? prev + 1 : prev - 1));
-      Alert.alert(t('errorTitle'), t('errorLikeUpdate'));
+      Alert.alert(
+        t('errorTitle', 'Error'),
+        t('errorLikeUpdate', 'Failed to update like status.')
+      );
     }
   };
 
@@ -164,16 +196,25 @@ export default function StoryScreen() {
     try {
       await axios.post(
         `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/stories/${storyData.storyId}/comments`,
-        {
-          userClerkId: userId,
-          text: commentText,
-        }
+        { userClerkId: userId, text: commentText }
       );
       setCommentsCount((prev) => prev + 1);
       setCommentText('');
       setCommentModalVisible(false);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to post comment.');
+    } catch (error: any) {
+      console.error('Comment error:', error.response?.data || error.message);
+      Alert.alert(t('errorTitle', 'Error'), 'Failed to post comment.');
+    }
+  };
+
+  const handleTts = () => {
+    if (!storyData?.story) return;
+    if (isPlayingTts) {
+      Tts.stop();
+      setIsPlayingTts(false);
+    } else {
+      Tts.speak(storyData.story);
+      setIsPlayingTts(true);
     }
   };
 
@@ -182,27 +223,24 @@ export default function StoryScreen() {
       <View
         style={[
           styles.container,
-          {
-            backgroundColor: theme.colors.background,
-            justifyContent: 'center',
-            alignItems: 'center',
-          },
+          styles.center,
+          { backgroundColor: theme.colors.background },
         ]}
       >
         <Text style={{ color: theme.colors.text }}>
-          Failed to load story data.
+          {t('errorLoadStory', 'Failed to load story data.')}
         </Text>
       </View>
     );
   }
 
-  const commentInputRef = React.useRef<TextInput>(null);
+  const isStorySaved = storyData.source === 'database';
 
   return (
-    <Modal
-      visible={true}
-      animationType="slide"
-      onRequestClose={() => router.back()}
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.flexContainer}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
     >
       <ScrollView
         style={[styles.container, { backgroundColor: theme.colors.background }]}
@@ -241,12 +279,37 @@ export default function StoryScreen() {
                       { color: theme.colors.textSecondary },
                     ]}
                   >
-                    {' '}
                     {storyData.readTime}
                   </Text>
                 </View>
               )}
-              {storyData.source === 'database' && (
+              {storyData.country && storyData.city && (
+                <View style={styles.metaItem}>
+                  <MapPin size={14} color={theme.colors.textSecondary} />
+                  <Text
+                    style={[
+                      styles.metaText,
+                      { color: theme.colors.textSecondary },
+                    ]}
+                  >
+                    Located: {storyData.country}, {storyData.city}
+                  </Text>
+                </View>
+              )}
+              {storyData.distance && (
+                <View style={styles.metaItem}>
+                  <Target size={14} color={theme.colors.textSecondary} />
+                  <Text
+                    style={[
+                      styles.metaText,
+                      { color: theme.colors.textSecondary },
+                    ]}
+                  >
+                    {storyData.distance} to {storyData.title}
+                  </Text>
+                </View>
+              )}
+              {isStorySaved && (
                 <View style={styles.metaItem}>
                   <BookOpen size={14} color={theme.colors.textSecondary} />
                   <Text
@@ -255,8 +318,9 @@ export default function StoryScreen() {
                       { color: theme.colors.textSecondary },
                     ]}
                   >
-                    {' '}
-                    {t('story')}
+                    {storyData.isEnhanced
+                      ? t('fullStory', 'Full Story')
+                      : t('previewStory', 'Story Preview')}
                   </Text>
                 </View>
               )}
@@ -267,6 +331,7 @@ export default function StoryScreen() {
         {coordinates && (
           <View style={styles.mapSection}>
             <MapView
+              provider={PROVIDER_GOOGLE}
               style={styles.map}
               initialRegion={{
                 ...coordinates,
@@ -281,7 +346,11 @@ export default function StoryScreen() {
             </MapView>
           </View>
         )}
+
         <View style={styles.storySection}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+            {t('story', 'Story')}
+          </Text>
           <Text style={[styles.storyContent, { color: theme.colors.text }]}>
             {storyData.story}
           </Text>
@@ -290,7 +359,7 @@ export default function StoryScreen() {
         {storyData.funFacts && storyData.funFacts.length > 0 && (
           <View style={styles.factsSection}>
             <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-              {t('interestingFacts')}
+              {t('interestingFacts', 'Interesting Facts')}
             </Text>
             {storyData.funFacts.map((fact, index) => (
               <View key={index} style={styles.factItem}>
@@ -312,161 +381,251 @@ export default function StoryScreen() {
           </View>
         )}
 
+        {storyData.sources && storyData.sources.length > 0 && (
+          <View style={styles.sourcesSection}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+              {t('sources', 'Sources')}
+            </Text>
+            {storyData.sources.map((source, index) => (
+              <Text
+                key={index}
+                style={[
+                  styles.sourceText,
+                  { color: theme.colors.textSecondary },
+                ]}
+              >
+                {source}
+              </Text>
+            ))}
+          </View>
+        )}
+
         <View style={styles.interactionSection}>
-          {storyData.source === 'database' ? (
-            <View
-              style={[
-                styles.interactionCard,
-                {
-                  backgroundColor: theme.colors.card,
-                  borderColor: theme.colors.border,
-                },
-              ]}
-            >
-              <View style={styles.interactionRow}>
-                <TouchableOpacity
-                  style={styles.interactionButton}
-                  onPress={handleLike}
+          {!storyData.isEnhanced && (
+            <>
+              <View style={styles.stylePicker}>
+                <Text
+                  style={[styles.sectionTitle, { color: theme.colors.text }]}
                 >
-                  <Heart
-                    size={20}
-                    color={
-                      isLiked ? theme.colors.error : theme.colors.textSecondary
-                    }
-                    fill={isLiked ? theme.colors.error : 'transparent'}
-                  />
-                  <Text
-                    style={[
-                      styles.interactionText,
-                      {
-                        color: isLiked
-                          ? theme.colors.error
-                          : theme.colors.textSecondary,
-                      },
-                    ]}
-                  >
-                    {likesCount}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.interactionButton}
-                  onPress={() => setCommentModalVisible(true)}
+                  {t('textStyle', 'Text Style')}
+                </Text>
+                <Picker
+                  selectedValue={selectedStyle}
+                  style={[styles.picker, { color: theme.colors.text }]}
+                  onValueChange={(itemValue) => setSelectedStyle(itemValue)}
                 >
-                  <MessageCircle size={20} color={theme.colors.textSecondary} />
-                  <Text
-                    style={[
-                      styles.interactionText,
-                      { color: theme.colors.textSecondary },
-                    ]}
-                  >
-                    {commentsCount}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.interactionButton}
-                  onPress={handleShare}
-                >
-                  <Share2 size={20} color={theme.colors.textSecondary} />
-                  <Text
-                    style={[
-                      styles.interactionText,
-                      { color: theme.colors.textSecondary },
-                    ]}
-                  >
-                    {t('share')}
-                  </Text>
-                </TouchableOpacity>
+                  <Picker.Item label="Narrative" value="narrative" />
+                  <Picker.Item label="Fairy Tale" value="fairy_tale" />
+                  <Picker.Item label="Business" value="business" />
+                </Picker>
               </View>
-            </View>
-          ) : (
-            <TouchableOpacity
-              style={[
-                styles.enhanceButton,
-                { backgroundColor: theme.colors.primary },
-              ]}
-              onPress={handleEnhance}
-              disabled={isEnhancing}
-            >
-              {isEnhancing ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <>
-                  <Zap size={20} color="#fff" />
-                  <Text style={styles.enhanceButtonText}>
-                    {t('enhanceCta')}
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
+              <TouchableOpacity style={styles.ttsButton} onPress={handleTts}>
+                {isPlayingTts ? (
+                  <Pause size={20} color={theme.colors.text} />
+                ) : (
+                  <Play size={20} color={theme.colors.text} />
+                )}
+                <Text style={[styles.buttonText, { color: theme.colors.text }]}>
+                  {isPlayingTts
+                    ? t('pauseStory', 'Pause Story')
+                    : t('playStory', 'Play Story')}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.enhanceButton,
+                  { backgroundColor: theme.colors.primary },
+                ]}
+                onPress={handleEnhance}
+                disabled={isEnhancing}
+              >
+                {isEnhancing ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Zap size={20} color="#fff" />
+                    <Text style={styles.enhanceButtonText}>
+                      {t('enhanceCta', 'Generate Full Story')}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </>
+          )}
+
+          {storyData.isEnhanced && (
+            <>
+              <TouchableOpacity style={styles.ttsButton} onPress={handleTts}>
+                {isPlayingTts ? (
+                  <Pause size={20} color={theme.colors.text} />
+                ) : (
+                  <Play size={20} color={theme.colors.text} />
+                )}
+                <Text style={[styles.buttonText, { color: theme.colors.text }]}>
+                  {isPlayingTts
+                    ? t('pauseStory', 'Pause Story')
+                    : t('playStory', 'Play Story')}
+                </Text>
+              </TouchableOpacity>
+              <View
+                style={[
+                  styles.interactionCard,
+                  {
+                    backgroundColor: theme.colors.card,
+                    borderColor: theme.colors.border,
+                  },
+                ]}
+              >
+                <View style={styles.interactionRow}>
+                  <TouchableOpacity
+                    style={styles.interactionButton}
+                    onPress={handleLike}
+                  >
+                    <Heart
+                      size={20}
+                      color={
+                        isLiked
+                          ? theme.colors.error
+                          : theme.colors.textSecondary
+                      }
+                      fill={isLiked ? theme.colors.error : 'transparent'}
+                    />
+                    <Text
+                      style={[
+                        styles.interactionText,
+                        {
+                          color: isLiked
+                            ? theme.colors.error
+                            : theme.colors.textSecondary,
+                        },
+                      ]}
+                    >
+                      {likesCount}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.interactionButton}
+                    onPress={() => setCommentModalVisible(true)}
+                  >
+                    <MessageCircle
+                      size={20}
+                      color={theme.colors.textSecondary}
+                    />
+                    <Text
+                      style={[
+                        styles.interactionText,
+                        { color: theme.colors.textSecondary },
+                      ]}
+                    >
+                      {commentsCount}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.interactionButton}
+                    onPress={handleShare}
+                  >
+                    <Share2 size={20} color={theme.colors.textSecondary} />
+                    <Text
+                      style={[
+                        styles.interactionText,
+                        { color: theme.colors.textSecondary },
+                      ]}
+                    >
+                      {t('share', 'Share')}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </>
           )}
         </View>
+
         {storyData.relatedQuests && storyData.relatedQuests.length > 0 && (
-          <View style={styles.questsSection}>...</View>
+          <View style={styles.questsSection}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+              {t('relatedQuests', 'Related Quests')}
+            </Text>
+            {storyData.relatedQuests.map((quest, index) => (
+              <View key={index} style={styles.questItem}>
+                <Target
+                  size={16}
+                  color={theme.colors.warning}
+                  style={styles.factIcon}
+                />
+                <View>
+                  <Text
+                    style={[styles.questTitle, { color: theme.colors.text }]}
+                  >
+                    {quest.title}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.questDescription,
+                      { color: theme.colors.textSecondary },
+                    ]}
+                  >
+                    {quest.description}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
         )}
       </ScrollView>
 
-      {/* Модальное окно для комментариев с KeyboardAvoidingView */}
       <Modal
         animationType="slide"
         transparent={true}
         visible={isCommentModalVisible}
         onRequestClose={() => setCommentModalVisible(false)}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'position'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
-          style={{ flex: 1 }}
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPressOut={() => setCommentModalVisible(false)}
         >
           <TouchableOpacity
-            style={styles.modalOverlay}
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.colors.card },
+            ]}
             activeOpacity={1}
-            onPressOut={() => setCommentModalVisible(false)}
           >
+            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
+              {t('commentsTitle', 'Leave a Comment')}
+            </Text>
+            <TextInput
+              style={[
+                styles.commentInput,
+                { borderColor: theme.colors.border, color: theme.colors.text },
+              ]}
+              placeholder={t('commentsPlaceholder', 'Share your thoughts...')}
+              placeholderTextColor={theme.colors.textSecondary}
+              multiline
+              value={commentText}
+              onChangeText={setCommentText}
+              autoFocus={true}
+            />
             <TouchableOpacity
               style={[
-                styles.modalContent,
-                { backgroundColor: theme.colors.card },
+                styles.postButton,
+                { backgroundColor: theme.colors.primary },
               ]}
-              activeOpacity={1}
+              onPress={handlePostComment}
             >
-              <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
-                {t('commentsTitle')}
-              </Text>
-              <TextInput
-                ref={commentInputRef}
-                style={[
-                  styles.commentInput,
-                  {
-                    borderColor: theme.colors.border,
-                    color: theme.colors.text,
-                  },
-                ]}
-                placeholder={t('commentsPlaceholder')}
-                placeholderTextColor={theme.colors.textSecondary}
-                multiline
-                value={commentText}
-                onChangeText={setCommentText}
-              />
-              <TouchableOpacity
-                style={[
-                  styles.postButton,
-                  { backgroundColor: theme.colors.primary },
-                ]}
-                onPress={handlePostComment}
-              >
-                <Text style={styles.buttonText}>{t('commentsPost')}</Text>
-              </TouchableOpacity>
+              <Text style={styles.buttonText}>{t('commentsPost', 'Post')}</Text>
             </TouchableOpacity>
           </TouchableOpacity>
-        </KeyboardAvoidingView>
+        </TouchableOpacity>
       </Modal>
-    </Modal>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   flexContainer: { flex: 1 },
   container: { flex: 1 },
+  center: { justifyContent: 'center', alignItems: 'center' },
   scrollContent: { paddingTop: 60, paddingBottom: 40 },
   titleSection: { paddingHorizontal: 20, marginBottom: 24, marginTop: 40 },
   titleCard: { padding: 24, borderRadius: 20, borderWidth: 1 },
@@ -483,15 +642,26 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   locationText: { fontSize: 16, fontWeight: '600' },
-  storyMeta: { flexDirection: 'row', gap: 20 },
+  storyMeta: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 20,
+    alignItems: 'center',
+  },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   metaText: { fontSize: 14, fontWeight: '600' },
-  mapSection: { height: 200, marginVertical: 20 },
-  map: { flex: 1 },
+  mapSection: {
+    height: 200,
+    marginHorizontal: 20,
+    borderRadius: 20,
+    overflow: 'hidden',
+    marginBottom: 32,
+  },
+  map: { ...StyleSheet.absoluteFillObject },
   storySection: { paddingHorizontal: 20, marginBottom: 32 },
+  sectionTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 20 },
   storyContent: { fontSize: 16, lineHeight: 26, fontWeight: '400' },
   factsSection: { paddingHorizontal: 20, marginBottom: 32 },
-  sectionTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 20 },
   factItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -500,6 +670,8 @@ const styles = StyleSheet.create({
   },
   factIcon: { marginRight: 12, marginTop: 4 },
   factText: { flex: 1, fontSize: 16, lineHeight: 24 },
+  sourcesSection: { paddingHorizontal: 20, marginBottom: 32 },
+  sourceText: { fontSize: 14, lineHeight: 22, marginBottom: 8 },
   interactionSection: { paddingHorizontal: 20, marginBottom: 32 },
   interactionCard: {
     borderRadius: 16,
@@ -528,22 +700,60 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 16,
     borderRadius: 16,
+    height: 52,
   },
   enhanceButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  ttsButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 16,
+    marginBottom: 16,
+  },
+  stylePicker: { marginBottom: 16 },
+  picker: { height: 50, width: 200 },
   questsSection: { paddingHorizontal: 20, marginBottom: 32 },
+  questItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+    paddingRight: 16,
+  },
+  questTitle: { fontSize: 16, fontWeight: '600', marginBottom: 4 },
+  questDescription: { fontSize: 14, lineHeight: 22 },
   modalOverlay: {
     flex: 1,
-    justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.6)',
   },
-  modalContent: { padding: 20, borderRadius: 10, margin: 20 },
-  modalTitle: { fontSize: 18, marginBottom: 10 },
+  modalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 24,
+    paddingBottom: 40,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
   commentInput: {
+    minHeight: 120,
     borderWidth: 1,
-    padding: 10,
-    borderRadius: 5,
-    minHeight: 100,
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    textAlignVertical: 'top',
   },
-  postButton: { padding: 10, borderRadius: 5, marginTop: 10 },
-  buttonText: { color: '#fff', textAlign: 'center' },
+  postButton: {
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 16,
+    height: 52,
+    justifyContent: 'center',
+  },
+  buttonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
 });

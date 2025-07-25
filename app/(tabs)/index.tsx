@@ -21,7 +21,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import axios from 'axios'; // Используем axios для надежности
+import axios from 'axios';
 import * as ImageManipulator from 'expo-image-manipulator';
 
 const { width } = Dimensions.get('window');
@@ -301,7 +301,6 @@ export default function CameraScreen() {
   );
 }
 
-// ...ЗДЕСЬ ИДУТ ВСЕ ВАШИ СТИЛИ, Я ИХ НЕ МЕНЯЛ...
 const styles = StyleSheet.create({
   container: { flex: 1 },
   permissionContainer: { flex: 1 },

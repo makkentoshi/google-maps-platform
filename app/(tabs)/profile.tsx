@@ -1,20 +1,30 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
-import { 
-  User, 
-  MapPin, 
-  Trophy, 
-  Star, 
-  Calendar, 
-  Settings, 
-  Share2, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Dimensions,
+  Image,
+  Alert,
+} from 'react-native';
+import {
+  User as UserIcon,
+  MapPin,
+  Trophy,
+  Star,
+  Calendar,
+  Settings,
+  Share2,
   Award,
   Target,
   Zap,
-  Clock
+  Clock,
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useUser, useAuth } from '@clerk/clerk-expo';
 
 const { width } = Dimensions.get('window');
 
@@ -58,112 +68,317 @@ const recentActivity = [
 ];
 
 const topAchievements = [
-  { id: 1, title: 'Moscow Explorer', description: 'Visited 50+ places', icon: 'map' },
-  { id: 2, title: 'Quest Master', description: 'Completed 10 quests', icon: 'trophy' },
-  { id: 3, title: 'Storyteller', description: 'Received 100+ likes', icon: 'star' },
+  {
+    id: 1,
+    title: 'Moscow Explorer',
+    description: 'Visited 50+ places',
+    icon: 'map',
+  },
+  {
+    id: 2,
+    title: 'Quest Master',
+    description: 'Completed 10 quests',
+    icon: 'trophy',
+  },
+  {
+    id: 3,
+    title: 'Storyteller',
+    description: 'Received 100+ likes',
+    icon: 'star',
+  },
 ];
 
 export default function ProfileScreen() {
   const { theme } = useTheme();
   const { t } = useLanguage();
+  const { user, isLoaded } = useUser();
+  const { signOut } = useAuth();
+
+  // Use Clerk user data if available, otherwise fallback to mock
+  const displayName =
+    isLoaded && user
+      ? user.fullName || user.username || user.primaryEmailAddress?.emailAddress
+      : mockUser.name;
+  const displayEmail =
+    isLoaded && user
+      ? user.primaryEmailAddress?.emailAddress
+      : mockUser.username;
+  const avatarUrl = isLoaded && user && user.imageUrl ? user.imageUrl : null;
+  const joinDate =
+    isLoaded && user && user.createdAt
+      ? new Date(user.createdAt).toLocaleDateString()
+      : mockUser.joinDate;
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } catch (err) {
+      Alert.alert('Error', 'Failed to sign out.');
+    }
+  };
+
   const progressPercentage = (mockUser.xp / mockUser.nextLevelXP) * 100;
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <View
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+    >
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
-        <View style={[styles.header, { backgroundColor: theme.colors.background }]}>
-          
+        <View
+          style={[styles.header, { backgroundColor: theme.colors.background }]}
+        >
           <View style={styles.headerTop}>
-            <TouchableOpacity style={[styles.settingsButton, { backgroundColor: theme.colors.surface }]}>
+            <TouchableOpacity
+              style={[
+                styles.settingsButton,
+                { backgroundColor: theme.colors.surface },
+              ]}
+            >
               <Settings size={24} color={theme.colors.text} />
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.shareButton, { backgroundColor: theme.colors.surface }]}>
+            <TouchableOpacity
+              style={[
+                styles.shareButton,
+                { backgroundColor: theme.colors.surface },
+              ]}
+            >
               <Share2 size={24} color={theme.colors.text} />
             </TouchableOpacity>
           </View>
 
           <View style={styles.profileInfo}>
             <View style={styles.avatarContainer}>
-              <View style={[styles.avatar, { backgroundColor: theme.colors.primary }]}>
-                <User size={40} color="#FFFFFF" />
-              </View>
-              <View style={[styles.levelBadge, { backgroundColor: theme.colors.warning + '20', borderColor: theme.colors.background }]}>
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+              ) : (
+                <View
+                  style={[
+                    styles.avatar,
+                    { backgroundColor: theme.colors.primary },
+                  ]}
+                >
+                  <UserIcon size={40} color="#FFFFFF" />
+                </View>
+              )}
+              <View
+                style={[
+                  styles.levelBadge,
+                  {
+                    backgroundColor: theme.colors.warning + '20',
+                    borderColor: theme.colors.background,
+                  },
+                ]}
+              >
                 <Zap size={12} color={theme.colors.warning} />
-                <Text style={[styles.levelText, { color: theme.colors.warning }]}>{mockUser.level}</Text>
+                <Text
+                  style={[styles.levelText, { color: theme.colors.warning }]}
+                >
+                  {mockUser.level}
+                </Text>
               </View>
             </View>
 
-            <Text style={[styles.userName, { color: theme.colors.text }]}>{mockUser.name}</Text>
-            <Text style={[styles.userHandle, { color: theme.colors.primary }]}>{mockUser.username}</Text>
-            
+            <Text style={[styles.userName, { color: theme.colors.text }]}>
+              {displayName}
+            </Text>
+            <Text style={[styles.userHandle, { color: theme.colors.primary }]}>
+              {displayEmail}
+            </Text>
             <View style={styles.joinInfo}>
               <Calendar size={14} color={theme.colors.textSecondary} />
-              <Text style={[styles.joinText, { color: theme.colors.textSecondary }]}>{t('joinedIn')} {mockUser.joinDate}</Text>
+              <Text
+                style={[styles.joinText, { color: theme.colors.textSecondary }]}
+              >
+                {t('joinedIn')} {joinDate}
+              </Text>
             </View>
           </View>
 
-          <View style={[styles.xpSection, { backgroundColor: theme.colors.surface }]}>
+          <View
+            style={[
+              styles.xpSection,
+              { backgroundColor: theme.colors.surface },
+            ]}
+          >
             <View style={styles.xpHeader}>
-              <Text style={[styles.xpLabel, { color: theme.colors.text }]}>{t('nextLevel')}</Text>
-              <Text style={[styles.xpProgress, { color: theme.colors.primary }]}>{mockUser.xp} / {mockUser.nextLevelXP} XP</Text>
+              <Text style={[styles.xpLabel, { color: theme.colors.text }]}>
+                {t('nextLevel')}
+              </Text>
+              <Text
+                style={[styles.xpProgress, { color: theme.colors.primary }]}
+              >
+                {mockUser.xp} / {mockUser.nextLevelXP} XP
+              </Text>
             </View>
-            <View style={[styles.xpBar, { backgroundColor: theme.colors.border }]}>
-              <View style={[styles.xpFill, { backgroundColor: theme.colors.primary, width: `${progressPercentage}%` }]} />
+            <View
+              style={[styles.xpBar, { backgroundColor: theme.colors.border }]}
+            >
+              <View
+                style={[
+                  styles.xpFill,
+                  {
+                    backgroundColor: theme.colors.primary,
+                    width: `${progressPercentage}%`,
+                  },
+                ]}
+              />
             </View>
           </View>
 
+          <TouchableOpacity
+            style={[
+              styles.signOutButton,
+              { backgroundColor: theme.colors.error },
+            ]}
+            onPress={handleSignOut}
+          >
+            <Text style={styles.signOutButtonText}>
+              {t('signOut') || 'Sign Out'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Stats */}
         <View style={styles.statsContainer}>
-          <View style={[styles.statCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <View
+            style={[
+              styles.statCard,
+              {
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
             <MapPin size={24} color={theme.colors.primary} />
-            <Text style={[styles.statNumber, { color: theme.colors.text }]}>{mockUser.visitedPlaces}</Text>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>{t('places')}</Text>
+            <Text style={[styles.statNumber, { color: theme.colors.text }]}>
+              {mockUser.visitedPlaces}
+            </Text>
+            <Text
+              style={[styles.statLabel, { color: theme.colors.textSecondary }]}
+            >
+              {t('places')}
+            </Text>
           </View>
-          <View style={[styles.statCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <View
+            style={[
+              styles.statCard,
+              {
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
             <Trophy size={24} color={theme.colors.warning} />
-            <Text style={[styles.statNumber, { color: theme.colors.text }]}>{mockUser.completedQuests}</Text>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>{t('quests')}</Text>
+            <Text style={[styles.statNumber, { color: theme.colors.text }]}>
+              {mockUser.completedQuests}
+            </Text>
+            <Text
+              style={[styles.statLabel, { color: theme.colors.textSecondary }]}
+            >
+              {t('quests')}
+            </Text>
           </View>
-          <View style={[styles.statCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <View
+            style={[
+              styles.statCard,
+              {
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
             <Star size={24} color={theme.colors.success} />
-            <Text style={[styles.statNumber, { color: theme.colors.text }]}>{mockUser.totalStories}</Text>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>{t('stories')}</Text>
+            <Text style={[styles.statNumber, { color: theme.colors.text }]}>
+              {mockUser.totalStories}
+            </Text>
+            <Text
+              style={[styles.statLabel, { color: theme.colors.textSecondary }]}
+            >
+              {t('stories')}
+            </Text>
           </View>
-          <View style={[styles.statCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <View
+            style={[
+              styles.statCard,
+              {
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
             <Award size={24} color={theme.colors.error} />
-            <Text style={[styles.statNumber, { color: theme.colors.text }]}>{mockUser.achievements}</Text>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>{t('achievements')}</Text>
+            <Text style={[styles.statNumber, { color: theme.colors.text }]}>
+              {mockUser.achievements}
+            </Text>
+            <Text
+              style={[styles.statLabel, { color: theme.colors.textSecondary }]}
+            >
+              {t('achievements')}
+            </Text>
           </View>
         </View>
 
         {/* Achievements */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{t('topAchievements')}</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+              {t('topAchievements')}
+            </Text>
             <TouchableOpacity>
-              <Text style={[styles.seeAllText, { color: theme.colors.primary }]}>{t('all')}</Text>
+              <Text
+                style={[styles.seeAllText, { color: theme.colors.primary }]}
+              >
+                {t('all')}
+              </Text>
             </TouchableOpacity>
           </View>
 
           {topAchievements.map((achievement) => (
-            <View key={achievement.id} style={[styles.achievementCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-                
-                <View style={[styles.achievementIcon, { backgroundColor: theme.colors.warning + '20' }]}>
-                  <Award size={24} color={theme.colors.warning} />
-                </View>
-                
-                <View style={styles.achievementInfo}>
-                  <Text style={[styles.achievementTitle, { color: theme.colors.text }]}>{achievement.title}</Text>
-                  <Text style={[styles.achievementDescription, { color: theme.colors.textSecondary }]}>{achievement.description}</Text>
-                </View>
-
-                <View style={[styles.achievementBadge, { backgroundColor: theme.colors.warning + '20' }]}>
-                  <Star size={16} color={theme.colors.warning} />
-                </View>
-
+            <View
+              key={achievement.id}
+              style={[
+                styles.achievementCard,
+                {
+                  backgroundColor: theme.colors.card,
+                  borderColor: theme.colors.border,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.achievementIcon,
+                  { backgroundColor: theme.colors.warning + '20' },
+                ]}
+              >
+                <Award size={24} color={theme.colors.warning} />
+              </View>
+              <View style={styles.achievementInfo}>
+                <Text
+                  style={[
+                    styles.achievementTitle,
+                    { color: theme.colors.text },
+                  ]}
+                >
+                  {achievement.title}
+                </Text>
+                <Text
+                  style={[
+                    styles.achievementDescription,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  {achievement.description}
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.achievementBadge,
+                  { backgroundColor: theme.colors.warning + '20' },
+                ]}
+              >
+                <Star size={16} color={theme.colors.warning} />
+              </View>
             </View>
           ))}
         </View>
@@ -171,29 +386,69 @@ export default function ProfileScreen() {
         {/* Recent Activity */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{t('recentActivity')}</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+              {t('recentActivity')}
+            </Text>
           </View>
 
           {recentActivity.map((activity) => (
-            <View key={activity.id} style={[styles.activityCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-              <View style={[styles.activityIcon, { backgroundColor: theme.colors.surface }]}>
-                {activity.type === 'quest_completed' && <Trophy size={20} color={theme.colors.primary} />}
-                {activity.type === 'place_visited' && <MapPin size={20} color={theme.colors.success} />}
-                {activity.type === 'story_liked' && <Star size={20} color={theme.colors.warning} />}
+            <View
+              key={activity.id}
+              style={[
+                styles.activityCard,
+                {
+                  backgroundColor: theme.colors.card,
+                  borderColor: theme.colors.border,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.activityIcon,
+                  { backgroundColor: theme.colors.surface },
+                ]}
+              >
+                {activity.type === 'quest_completed' && (
+                  <Trophy size={20} color={theme.colors.primary} />
+                )}
+                {activity.type === 'place_visited' && (
+                  <MapPin size={20} color={theme.colors.success} />
+                )}
+                {activity.type === 'story_liked' && (
+                  <Star size={20} color={theme.colors.warning} />
+                )}
               </View>
-
               <View style={styles.activityInfo}>
-                <Text style={[styles.activityTitle, { color: theme.colors.text }]}>{activity.title}</Text>
+                <Text
+                  style={[styles.activityTitle, { color: theme.colors.text }]}
+                >
+                  {activity.title}
+                </Text>
                 <View style={styles.activityMeta}>
                   <Clock size={12} color={theme.colors.textSecondary} />
-                  <Text style={[styles.activityTime, { color: theme.colors.textSecondary }]}>{activity.time}</Text>
+                  <Text
+                    style={[
+                      styles.activityTime,
+                      { color: theme.colors.textSecondary },
+                    ]}
+                  >
+                    {activity.time}
+                  </Text>
                 </View>
               </View>
-
               <View style={styles.activityReward}>
-                <View style={[styles.xpBadge, { backgroundColor: theme.colors.warning + '20' }]}>
+                <View
+                  style={[
+                    styles.xpBadge,
+                    { backgroundColor: theme.colors.warning + '20' },
+                  ]}
+                >
                   <Zap size={12} color={theme.colors.warning} />
-                  <Text style={[styles.xpText, { color: theme.colors.warning }]}>+{activity.xp}</Text>
+                  <Text
+                    style={[styles.xpText, { color: theme.colors.warning }]}
+                  >
+                    +{activity.xp}
+                  </Text>
                 </View>
               </View>
             </View>
@@ -202,17 +457,39 @@ export default function ProfileScreen() {
 
         {/* Action Buttons */}
         <View style={styles.actionsContainer}>
-          <TouchableOpacity style={[styles.actionButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <TouchableOpacity
+            style={[
+              styles.actionButton,
+              {
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
             <Target size={20} color={theme.colors.primary} />
-            <Text style={[styles.actionButtonText, { color: theme.colors.text }]}>{t('myQuests')}</Text>
+            <Text
+              style={[styles.actionButtonText, { color: theme.colors.text }]}
+            >
+              {t('myQuests')}
+            </Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity style={[styles.actionButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <TouchableOpacity
+            style={[
+              styles.actionButton,
+              {
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
             <MapPin size={20} color={theme.colors.success} />
-            <Text style={[styles.actionButtonText, { color: theme.colors.text }]}>{t('visitedPlaces')}</Text>
+            <Text
+              style={[styles.actionButtonText, { color: theme.colors.text }]}
+            >
+              {t('visitedPlaces')}
+            </Text>
           </TouchableOpacity>
         </View>
-
       </ScrollView>
     </View>
   );
@@ -456,6 +733,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   actionButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  signOutButton: {
+    marginTop: 20,
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  signOutButtonText: {
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
   },

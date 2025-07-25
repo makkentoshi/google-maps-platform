@@ -31,8 +31,8 @@ export default function TabLayout() {
               elevation: 8,
             },
             tabBarLabelStyle: {
-              fontSize: 12,
-              fontWeight: '600',
+              fontSize: 10,
+              fontWeight: '500',
               marginTop: 4,
             },
           }}
