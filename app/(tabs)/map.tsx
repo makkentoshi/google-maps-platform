@@ -17,14 +17,15 @@ import * as Location from 'expo-location';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import axios from 'axios';
-import { MapPin, Filter, Navigation } from 'lucide-react-native';
-import { Linking } from 'react-native';
+import { MapPin, Filter, Navigation, Menu } from 'lucide-react-native';
 import MapView from 'react-native-map-clustering';
+import { Linking } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
 type Place = {
-  storyId: string;
+  id: string;
+  placeId: string;
   title: string;
   location: string;
   coordinates: string | null;
@@ -56,6 +57,10 @@ export default function MapScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(15);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [styleMenuOpen, setStyleMenuOpen] = useState(false);
+  const [selectedStyle, setSelectedStyle] = useState<'minimal' | 'detailed'>(
+    'detailed'
+  );
 
   // Request location permissions
   useEffect(() => {
@@ -86,7 +91,7 @@ export default function MapScreen() {
         {
           params: {
             sort: filter === 'recent' ? 'createdAt' : undefined,
-            style: filter === 'historical' ? 'narrative' : undefined, // Map 'historical' to 'narrative'
+            style: filter === 'historical' ? 'narrative' : undefined,
           },
         }
       );
@@ -155,7 +160,7 @@ export default function MapScreen() {
         if (isNaN(latitude) || isNaN(longitude)) return null;
         return (
           <Marker
-            key={place.storyId}
+            key={place.id}
             coordinate={{ latitude, longitude }}
             title={place.title}
             onPress={() => setSelectedPlace(place)}
@@ -167,22 +172,73 @@ export default function MapScreen() {
       .filter(Boolean);
   }, [places, zoomLevel, theme.colors.primary]);
 
-  // Navigate to story.tsx
+  // Handle map press (fix crash)
+  const handleMapPress = useCallback(() => {
+    setSelectedPlace(null); // Clear selected place on empty tap
+  }, []);
+
+  // Navigate to story.tsx or generate screen
   const handleDetailsPress = useCallback(
-    (storyId: string) => {
-      router.push({
-        pathname: '/story',
-        params: {
-          data: JSON.stringify({
-            storyId,
-            source: 'database',
-            isEnhanced: true,
-          }),
-        },
-      });
+    async (place: Place) => {
+      try {
+        const response = await axios.get(
+          `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/stories/${place.id}`
+        );
+        if (response.data?.generatedText) {
+          router.push({
+            pathname: '/story',
+            params: {
+              data: JSON.stringify({
+                id: place.id,
+                placeId: place.placeId,
+                source: 'database',
+                isEnhanced: place.isEnhanced,
+                title: place.title,
+                location: place.location,
+                generatedText: response.data.generatedText,
+                funFacts: response.data.funFacts,
+                sources: response.data.sources,
+                city: place.city,
+                country: place.country,
+                coordinates: place.coordinates,
+                style: place.style,
+                likes: place.likes,
+                comments: place.comments,
+                readTime: response.data.readTime,
+              }),
+            },
+          });
+        } else {
+          // Fallback to generate screen
+          router.push({
+            pathname: '/story', // generate screen
+            params: {
+              placeId: place.placeId,
+              placeName: place.title,
+              coordinates: place.coordinates,
+            },
+          });
+        }
+      } catch (error: any) {
+        console.error('Fetch story error:', error);
+        Alert.alert(
+          t('errorTitle', 'Error'),
+          error.response?.data?.message ||
+            t('errorFetchStory', 'Failed to fetch story.')
+        );
+        // Fallback to generate screen
+        router.push({
+          pathname: '/story', // generate screen
+          params: {
+            placeId: place.placeId,
+            placeName: place.title,
+            coordinates: place.coordinates,
+          },
+        });
+      }
       setSelectedPlace(null);
     },
-    [router]
+    [router, t]
   );
 
   // Open Google Maps for directions
@@ -217,6 +273,22 @@ export default function MapScreen() {
     [t]
   );
 
+  // Handle style selection and generate
+  const handleGenerate = useCallback(() => {
+    if (selectedPlace) {
+      router.push({
+        pathname: '/story', // generate screen
+        params: {
+          placeId: selectedPlace.placeId,
+          placeName: selectedPlace.title,
+          coordinates: selectedPlace.coordinates,
+          style: selectedStyle,
+        },
+      });
+      setStyleMenuOpen(false);
+    }
+  }, [selectedPlace, selectedStyle, router]);
+
   return (
     <GestureHandlerRootView style={styles.container}>
       <MapView
@@ -229,6 +301,7 @@ export default function MapScreen() {
           longitudeDelta: 0.05,
         }}
         onRegionChangeComplete={handleRegionChange}
+        onPress={handleMapPress}
         showsUserLocation={!!userLocation}
       >
         {markers}
@@ -271,7 +344,7 @@ export default function MapScreen() {
                 styles.cardButton,
                 { backgroundColor: theme.colors.primary },
               ]}
-              onPress={() => handleDetailsPress(selectedPlace.storyId)}
+              onPress={() => handleDetailsPress(selectedPlace)}
             >
               <Text style={styles.cardButtonText}>
                 {t('details', 'Details')}
@@ -334,14 +407,83 @@ export default function MapScreen() {
         </View>
       </Modal>
 
-      <View style={styles.filterBar}>
+      <Modal
+        visible={styleMenuOpen}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setStyleMenuOpen(false)}
+      >
+        <View style={styles.sidebarOverlay}>
+          <View
+            style={[styles.sidebar, { backgroundColor: theme.colors.card }]}
+          >
+            <Text style={[styles.sidebarTitle, { color: theme.colors.text }]}>
+              {t('generateStory', 'Generate Story')}
+            </Text>
+            {['minimal', 'detailed'].map((style) => (
+              <TouchableOpacity
+                key={style}
+                style={styles.sidebarItem}
+                onPress={() => setSelectedStyle(style as any)}
+              >
+                <Text
+                  style={[
+                    styles.sidebarText,
+                    {
+                      color:
+                        selectedStyle === style
+                          ? theme.colors.primary
+                          : theme.colors.text,
+                    },
+                  ]}
+                >
+                  {t(style, style.charAt(0).toUpperCase() + style.slice(1))}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              style={[
+                styles.sidebarItem,
+                {
+                  backgroundColor: theme.colors.primary,
+                  borderRadius: 8,
+                  padding: 12,
+                },
+              ]}
+              onPress={handleGenerate}
+            >
+              <Text style={[styles.sidebarText, { color: '#fff' }]}>
+                {t('generateFullStory', 'Generate Full Story')}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.sidebarItem}
+              onPress={() => setStyleMenuOpen(false)}
+            >
+              <Text style={[styles.sidebarText, { color: theme.colors.error }]}>
+                {t('close', 'Close')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <View style={styles.topBar}>
+        <View style={styles.filterBar}>
+          <TouchableOpacity
+            style={styles.filterButton}
+            onPress={() => setSidebarOpen(true)}
+          >
+            <Filter size={20} color={theme.colors.text} />
+          </TouchableOpacity>
+          {isLoading && <ActivityIndicator color={theme.colors.primary} />}
+        </View>
         <TouchableOpacity
-          style={styles.filterButton}
-          onPress={() => setSidebarOpen(true)}
+          style={styles.menuButton}
+          onPress={() => setStyleMenuOpen(true)}
         >
-          <Filter size={20} color={theme.colors.text} />
+          <Menu size={24} color={theme.colors.text} />
         </TouchableOpacity>
-        {isLoading && <ActivityIndicator color={theme.colors.primary} />}
       </View>
     </GestureHandlerRootView>
   );
@@ -350,6 +492,36 @@ export default function MapScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   map: { flex: 1 },
+  topBar: {
+    position: 'absolute',
+    top: 40,
+    left: 20,
+    right: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  filterBar: { flexDirection: 'row', gap: 12, alignItems: 'center' },
+  filterButton: {
+    padding: 10,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  menuButton: {
+    padding: 10,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
+  },
   sidebarOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -390,22 +562,4 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   cardButtonText: { color: '#fff', fontWeight: '600', fontSize: 14 },
-  filterBar: {
-    position: 'absolute',
-    top: 40,
-    left: 20,
-    flexDirection: 'row',
-    gap: 12,
-    alignItems: 'center',
-  },
-  filterButton: {
-    padding: 10,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 3,
-  },
 });
