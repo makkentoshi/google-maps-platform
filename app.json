@@ -9,7 +9,8 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.markiscoding.boltexponativewind"
     },
     "web": {
       "bundler": "metro",
@@ -20,13 +21,13 @@
       "expo-router",
       "expo-font",
       "expo-web-browser",
-      "react-native-maps",
-      {
-        "googleMapsApiKey": {
-          "android": "your_google_maps_api_key",
-          "ios": "your_google_maps_api_key"
+      [
+        "react-native-maps",
+        {
+          "androidApiKey": "$ANDROID_MAPS_KEY",
+          "iosApiKey": "$IOS_MAPS_KEY"
         }
-      }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
