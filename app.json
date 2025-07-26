@@ -20,14 +20,7 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "expo-web-browser",
-      [
-        "react-native-maps",
-        {
-          "androidApiKey": "$ANDROID_MAPS_KEY",
-          "iosApiKey": "$IOS_MAPS_KEY"
-        }
-      ]
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
