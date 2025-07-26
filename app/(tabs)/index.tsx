@@ -71,10 +71,13 @@ export default function CameraScreen() {
 
       const result = response.data;
 
+      const { placeId, placeName, coordinates, initialText } = response.data;
+
       router.push({
         pathname: '/story',
         params: { data: JSON.stringify(result) },
       });
+      //  params: { data: JSON.stringify(result) }, - OLD
     } catch (error) {
       let errorMessage = 'An unknown error occurred.';
       if (axios.isAxiosError(error)) {
