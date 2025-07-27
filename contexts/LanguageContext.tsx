@@ -18,6 +18,7 @@ const translations: Translations = {
   settings: { en: 'Settings', ru: 'Настройки' },
   search: { en: 'Search', ru: 'Найти' },
   leaderboard: { en: 'Leaderboard', ru: 'Таблица лидеров' },
+  map: { en: 'Map', ru: 'Карта' },
 
   // Camera Screen
   cameraAccess: { en: 'Camera Access', ru: 'Доступ к камере' },
