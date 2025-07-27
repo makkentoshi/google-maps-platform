@@ -70,6 +70,7 @@ type StoryData = {
   isEnhanced?: boolean;
 };
 
+
 export default function StoryScreen() {
   const { theme } = useTheme();
   const { t } = useLanguage();

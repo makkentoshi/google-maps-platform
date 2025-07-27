@@ -7,6 +7,7 @@ import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
 import { tokenCache } from '@clerk/clerk-expo/token-cache';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { LanguageProvider } from '@/contexts/LanguageContext';
+import { AnimationProvider } from '@/contexts/AnimationProvider';
 
 const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
@@ -59,12 +60,14 @@ export default function RootLayout() {
       tokenCache={tokenCache}
       publishableKey={CLERK_PUBLISHABLE_KEY}
     >
-      <ThemeProvider>
-        <LanguageProvider>
-          <InitialLayout />
-          <StatusBar style="auto" />
-        </LanguageProvider>
-      </ThemeProvider>
+      <AnimationProvider>
+        <ThemeProvider>
+          <LanguageProvider>
+            <InitialLayout />
+            <StatusBar style="auto" />
+          </LanguageProvider>
+        </ThemeProvider>
+      </AnimationProvider>
     </ClerkProvider>
   );
 }

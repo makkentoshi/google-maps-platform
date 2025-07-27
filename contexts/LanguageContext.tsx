@@ -16,18 +16,35 @@ const translations: Translations = {
   quests: { en: 'Quests', ru: 'Квесты' },
   profile: { en: 'Profile', ru: 'Профиль' },
   settings: { en: 'Settings', ru: 'Настройки' },
+  search: { en: 'Search', ru: 'Найти' },
+  leaderboard: { en: 'Leaderboard', ru: 'Таблица лидеров' },
 
   // Camera Screen
   cameraAccess: { en: 'Camera Access', ru: 'Доступ к камере' },
-  cameraPermissionText: { en: 'We need camera access to recognize places and create stories', ru: 'Для распознавания мест и создания историй нужен доступ к камере' },
+  cameraPermissionText: {
+    en: 'We need camera access to recognize places and create stories',
+    ru: 'Для распознавания мест и создания историй нужен доступ к камере',
+  },
   grantAccess: { en: 'Grant Access', ru: 'Предоставить доступ' },
-  pointAtLandmark: { en: 'Point camera at a landmark', ru: 'Наведите камеру на достопримечательность' },
-  recognizingLocation: { en: 'Recognizing location...', ru: 'Распознаю локацию...' },
-  generatingStory: { en: 'Generating story with AI', ru: 'Генерирую историю с помощью AI' },
+  pointAtLandmark: {
+    en: 'Point camera at a landmark',
+    ru: 'Наведите камеру на достопримечательность',
+  },
+  recognizingLocation: {
+    en: 'Recognizing location...',
+    ru: 'Распознаю локацию...',
+  },
+  generatingStory: {
+    en: 'Generating story with AI',
+    ru: 'Генерирую историю с помощью AI',
+  },
   attachPhoto: { en: 'Attach Photo', ru: 'Прикрепить фото' },
 
   // Explore Screen
-  exploreSubtitle: { en: 'Discover stories around you', ru: 'Откройте истории вокруг вас' },
+  exploreSubtitle: {
+    en: 'Discover stories around you',
+    ru: 'Откройте истории вокруг вас',
+  },
   all: { en: 'All', ru: 'Все' },
   architecture: { en: 'Architecture', ru: 'Архитектура' },
   parks: { en: 'Parks', ru: 'Парки' },
@@ -41,7 +58,10 @@ const translations: Translations = {
   learnStory: { en: 'Learn Story', ru: 'Узнать историю' },
 
   // Quests Screen
-  questsSubtitle: { en: 'Explore and earn rewards', ru: 'Исследуйте и зарабатывайте' },
+  questsSubtitle: {
+    en: 'Explore and earn rewards',
+    ru: 'Исследуйте и зарабатывайте',
+  },
   level: { en: 'Level', ru: 'Уровень' },
   questsLabel: { en: 'Quests', ru: 'Квестов' },
   places: { en: 'Places', ru: 'Места' },
@@ -83,26 +103,41 @@ const translations: Translations = {
   about: { en: 'About', ru: 'О приложении' },
   version: { en: 'Version', ru: 'Версия' },
   support: { en: 'Support', ru: 'Поддержка' },
-  
+
   // --- Story Screen (Additions) ---
   story: { en: 'Full Story', ru: 'Полная история' },
-  summary: { en: 'Summary', ru: 'Краткое содержание'},
+  summary: { en: 'Summary', ru: 'Краткое содержание' },
   share: { en: 'Share', ru: 'Поделиться' },
   interestingFacts: { en: 'Interesting Facts', ru: 'Интересные факты' },
   relatedQuests: { en: 'Related Quests', ru: 'Связанные квесты' },
   start: { en: 'Start', ru: 'Начать' },
-  enhanceCta: { en: 'Generate Full Story', ru: 'Создать полную историю'},
+  enhanceCta: { en: 'Generate Full Story', ru: 'Создать полную историю' },
   commentsTitle: { en: 'Leave a Comment', ru: 'Оставить комментарий' },
-  commentsPlaceholder: { en: 'Share your thoughts...', ru: 'Поделитесь мыслями...' },
+  commentsPlaceholder: {
+    en: 'Share your thoughts...',
+    ru: 'Поделитесь мыслями...',
+  },
   commentsPost: { en: 'Post', ru: 'Опубликовать' },
 
   // Error Messages
-  errorTitle: { en: 'Error', ru: 'Ошибка'},
-  errorLoadStory: { en: 'Failed to load story data.', ru: 'Не удалось загрузить историю.' },
-  errorEnhanceStory: { en: 'Failed to generate story.', ru: 'Не удалось сгенерировать историю.' },
-  errorSharing: { en: 'Sharing failed.', ru: 'Не удалось поделиться.'},
-  errorLikeUpdate: { en: 'Failed to update like status.', ru: 'Не удалось обновить статус лайка.'},
-  errorCommentPost: { en: 'Failed to post comment.', ru: 'Не удалось опубликовать комментарий.'}
+  errorTitle: { en: 'Error', ru: 'Ошибка' },
+  errorLoadStory: {
+    en: 'Failed to load story data.',
+    ru: 'Не удалось загрузить историю.',
+  },
+  errorEnhanceStory: {
+    en: 'Failed to generate story.',
+    ru: 'Не удалось сгенерировать историю.',
+  },
+  errorSharing: { en: 'Sharing failed.', ru: 'Не удалось поделиться.' },
+  errorLikeUpdate: {
+    en: 'Failed to update like status.',
+    ru: 'Не удалось обновить статус лайка.',
+  },
+  errorCommentPost: {
+    en: 'Failed to post comment.',
+    ru: 'Не удалось опубликовать комментарий.',
+  },
 };
 
 interface LanguageContextType {
@@ -111,15 +146,19 @@ interface LanguageContextType {
   t: (key: string, fallback?: string, options?: any) => string;
 }
 
-const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
+const LanguageContext = createContext<LanguageContextType | undefined>(
+  undefined
+);
 
-export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const [language, setLanguage] = useState<Language>('en');
 
   const t = (key: string, fallback?: string, options?: any): string => {
     let translation = translations[key]?.[language] || fallback || key;
     if (options) {
-      Object.keys(options).forEach(optKey => {
+      Object.keys(options).forEach((optKey) => {
         translation = translation.replace(`{{${optKey}}}`, options[optKey]);
       });
     }
