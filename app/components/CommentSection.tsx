@@ -1,104 +1,103 @@
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  StyleSheet,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, FlatList, StyleSheet } from 'react-native';
 import axios from 'axios';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { useAuth } from '@clerk/clerk-expo';
-import { Dispatch, SetStateAction } from 'react';
 
 type Comment = {
   id: string;
-  content: string;
+  text: string;
   userId: string;
   createdAt: string;
 };
 
-type CommentsSectionProps = {
+type CommentSectionProps = {
   storyId?: string;
   commentsCount: number;
-  setCommentsCount: Dispatch<SetStateAction<number>>;
+  setCommentsCount: React.Dispatch<React.SetStateAction<number>>;
 };
 
 export default function CommentSection({
   storyId,
   commentsCount,
   setCommentsCount,
-}: CommentsSectionProps) {
+}: CommentSectionProps) {
   const { theme } = useTheme();
   const { t } = useLanguage();
-  const { userId } = useAuth();
   const [comments, setComments] = useState<Comment[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (storyId) {
+      const fetchComments = async () => {
+        setLoading(true);
+        try {
+          const response = await axios.get(
+            `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/stories/${storyId}/comments`
+          );
+          setComments(response.data.comments || []);
+          setCommentsCount(response.data.comments?.length || 0);
+        } catch (error: any) {
+          console.error('Fetch comments error:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
       fetchComments();
     }
-  }, [storyId]);
+  }, [storyId, setCommentsCount]);
 
-  const fetchComments = async () => {
-    setIsLoading(true);
-    try {
-      const response = await axios.get(
-        `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/stories/${storyId}/comment`,
-        { headers: { 'x-clerk-user-id': userId } }
-      );
-      setComments(response.data.comments || []);
-      setCommentsCount(response.data.comments?.length || 0);
-    } catch (error: any) {
-      console.error(
-        'Fetch comments error:',
-        error.response?.data || error.message
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  if (isLoading) {
-    return <ActivityIndicator size="large" color={theme.colors.primary} />;
-  }
+  const renderComment = ({ item }: { item: Comment }) => (
+    <View
+      style={[styles.commentContainer, { borderColor: theme.colors.border }]}
+    >
+      <Text style={[styles.commentText, { color: theme.colors.text }]}>
+        {item.text}
+      </Text>
+      <Text style={[styles.commentMeta, { color: theme.colors.textSecondary }]}>
+        {t('postedBy', 'Posted by')} {item.userId} {t('on', 'on')}{' '}
+        {new Date(item.createdAt).toLocaleDateString()}
+      </Text>
+    </View>
+  );
 
   return (
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
-      <Text style={[styles.title, { color: theme.colors.text }]}>
+      <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
         {t('comments', 'Comments')} ({commentsCount})
       </Text>
-      <FlatList
-        data={comments}
-        renderItem={({ item }) => (
-          <View style={[styles.comment, { borderColor: theme.colors.border }]}>
-            <Text style={[styles.commentText, { color: theme.colors.text }]}>
-              {item.content}
-            </Text>
-            <Text
-              style={[
-                styles.commentDate,
-                { color: theme.colors.textSecondary },
-              ]}
-            >
-              {new Date(item.createdAt).toLocaleDateString()}
-            </Text>
-          </View>
-        )}
-        keyExtractor={(item) => item.id}
-      />
+      {loading ? (
+        <Text style={{ color: theme.colors.textSecondary }}>
+          {t('loading', 'Loading...')}
+        </Text>
+      ) : comments.length === 0 ? (
+        <Text style={{ color: theme.colors.textSecondary }}>
+          {t('noComments', 'No comments yet')}
+        </Text>
+      ) : (
+        <FlatList
+          data={comments}
+          renderItem={renderComment}
+          keyExtractor={(item) => item.id}
+          style={styles.commentList}
+        />
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { paddingHorizontal: 20, marginBottom: 32 },
-  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 20 },
-  comment: { padding: 12, borderWidth: 1, borderRadius: 8, marginBottom: 8 },
-  commentText: { fontSize: 14 },
-  commentDate: { fontSize: 12, marginTop: 4 },
+  sectionTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 20 },
+  commentContainer: {
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  commentText: { fontSize: 16, marginBottom: 4 },
+  commentMeta: { fontSize: 12 },
+  commentList: { flexGrow: 0 },
 });

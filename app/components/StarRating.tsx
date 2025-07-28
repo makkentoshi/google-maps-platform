@@ -57,6 +57,8 @@ export const StarRating: React.FC<StarRatingProps> = ({
   );
 };
 
+export default StarRating;
+
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',

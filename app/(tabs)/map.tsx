@@ -1,4 +1,10 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useMemo,
+  useEffect,
+  useRef,
+} from 'react';
 import {
   View,
   Text,
@@ -9,7 +15,7 @@ import {
   Platform,
   Dimensions,
 } from 'react-native';
-import { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
@@ -18,8 +24,10 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import axios from 'axios';
 import { MapPin, Filter } from 'lucide-react-native';
 import { Linking } from 'react-native';
-import MapView from 'react-native-map-clustering';
+// import MapView from 'react-native-map-clustering';
+import ClusteredMapView from 'react-native-map-clustering';
 import { StarRating } from '@/app/components/StarRating';
+import { useLocalSearchParams } from 'expo-router';
 
 import Animated, {
   useSharedValue,
@@ -81,6 +89,34 @@ export default function MapScreen() {
     opacity: cardScale.value,
   }));
 
+  const params = useLocalSearchParams();
+  const mapRef = useRef<MapView>(null);
+
+  const initialCoordinates = params.coordinates
+    ? typeof params.coordinates === 'string'
+      ? params.coordinates.split(',').map(Number)
+      : Array.isArray(params.coordinates) && params.coordinates[0]
+      ? params.coordinates[0].split(',').map(Number)
+      : null
+    : null;
+
+  const initialRegion =
+    initialCoordinates &&
+    !isNaN(initialCoordinates[0]) &&
+    !isNaN(initialCoordinates[1])
+      ? {
+          latitude: initialCoordinates[0],
+          longitude: initialCoordinates[1],
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        }
+      : {
+          latitude: userLocation?.latitude || 51.5,
+          longitude: userLocation?.longitude || -0.12,
+          latitudeDelta: 0.05,
+          longitudeDelta: 0.05,
+        };
+
   // Request location permissions
   useEffect(() => {
     (async () => {
@@ -100,6 +136,25 @@ export default function MapScreen() {
       });
     })();
   }, [t]);
+
+  useEffect(() => {
+    if (
+      initialCoordinates &&
+      mapRef.current &&
+      !isNaN(initialCoordinates[0]) &&
+      !isNaN(initialCoordinates[1])
+    ) {
+      mapRef.current.animateToRegion(
+        {
+          latitude: initialCoordinates[0],
+          longitude: initialCoordinates[1],
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        },
+        1000
+      );
+    }
+  }, [initialCoordinates]);
 
   // Fetch places based on filter
   const fetchPlaces = useCallback(async () => {
@@ -122,9 +177,9 @@ export default function MapScreen() {
         fetchedPlaces.map(async (place: any) => {
           const [avgResponse, googleResponse] = await Promise.all([
             axios.get(
-              `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/ratings?placeId=${place.placeId}`   ///
+              `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/ratings?placeId=${place.placeId}`
             ),
-            place.placeId // was googlePlaceId
+            place.placeId
               ? axios.get(
                   `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/places?placeId=${place.placeId}`
                 )
@@ -132,11 +187,12 @@ export default function MapScreen() {
           ]);
           return {
             ...place,
-            averageRating: avgResponse.data.averageRating,
-            googleRating: googleResponse.data.googleRating,
+            averageRating: parseFloat(avgResponse.data.averageRating) || 0.0,
+            googleRating: parseFloat(googleResponse.data.googleRating) || 0.0,
           };
         })
       );
+
       console.log('Fetched places:', fetchedPlaces);
       setPlaces(fetchedPlaces);
     } catch (error: any) {
@@ -164,6 +220,7 @@ export default function MapScreen() {
           radius: 10000,
         }
       );
+
       let fetchedPlaces = Array.isArray(response.data.places)
         ? response.data.places
         : [];
@@ -173,7 +230,7 @@ export default function MapScreen() {
             axios.get(
               `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/ratings?placeId=${place.placeId}`
             ),
-            place.placeId // was googlePlaceId
+            place.placeId
               ? axios.get(
                   `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/places?placeId=${place.placeId}`
                 )
@@ -181,8 +238,8 @@ export default function MapScreen() {
           ]);
           return {
             ...place,
-            averageRating: avgResponse.data.averageRating,
-            googleRating: googleResponse.data.googleRating,
+            averageRating: parseFloat(avgResponse.data.averageRating) || 0.0,
+            googleRating: parseFloat(googleResponse.data.googleRating) || 0.0,
           };
         })
       );
@@ -370,15 +427,11 @@ export default function MapScreen() {
           <ActivityIndicator size="large" color={theme.colors.primary} />
         </View>
       )}
-      <MapView
+      <ClusteredMapView
+        ref={mapRef}
         provider={PROVIDER_GOOGLE}
         style={styles.map}
-        initialRegion={{
-          latitude: userLocation?.latitude || 51.5,
-          longitude: userLocation?.longitude || -0.12,
-          latitudeDelta: 0.05,
-          longitudeDelta: 0.05,
-        }}
+        initialRegion={initialRegion as Region}
         onRegionChangeComplete={handleRegionChange}
         onPress={() => {
           if (!isMarkerPressed) {
@@ -388,8 +441,19 @@ export default function MapScreen() {
         }}
         showsUserLocation={!!userLocation}
       >
+        {initialCoordinates &&
+          !isNaN(initialCoordinates[0]) &&
+          !isNaN(initialCoordinates[1]) && (
+            <Marker
+              coordinate={{
+                latitude: initialCoordinates[0],
+                longitude: initialCoordinates[1],
+              }}
+              pinColor={theme.colors.primary}
+            />
+          )}
         {markers}
-      </MapView>
+      </ClusteredMapView>
 
       {selectedPlace && (
         <Animated.View
@@ -442,13 +506,17 @@ export default function MapScreen() {
             style={[styles.ratingText, { color: theme.colors.text || '#000' }]}
           >
             {t('userRating', 'User Rating')}:{' '}
-            {selectedPlace.averageRating?.toFixed(1) || 'N/A'}
+            {typeof selectedPlace.averageRating === 'number'
+              ? selectedPlace.averageRating.toFixed(1)
+              : 'N/A'}
           </Text>
           <Text
             style={[styles.ratingText, { color: theme.colors.text || '#000' }]}
           >
             {t('googleRating', 'Google Rating')}:{' '}
-            {selectedPlace.googleRating?.toFixed(1) || 'N/A'}
+            {typeof selectedPlace.googleRating === 'number'
+              ? selectedPlace.googleRating.toFixed(1)
+              : 'N/A'}
           </Text>
           <View style={styles.placeCardButtons}>
             <TouchableOpacity
