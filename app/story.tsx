@@ -499,63 +499,97 @@ export default function StoryScreen() {
     );
   };
 
-  const PlaygroundTab = () => (
-    <View
-      style={[
-        styles.container,
-        { backgroundColor: theme.colors.background, padding: 24 },
-      ]}
-    >
-      {!storyData?.isEnhanced && (
-        <>
-          <View style={styles.stylePicker}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-              {t('textStyle', 'Text Style')}
-            </Text>
-            <Picker
-              selectedValue={selectedStyle}
-              style={[styles.picker, { color: theme.colors.text }]}
-              onValueChange={(itemValue) => setSelectedStyle(itemValue)}
-            >
-              <Picker.Item label="Narrative" value="narrative" />
-              <Picker.Item label="Fairy Tale" value="fairy_tale" />
-              <Picker.Item label="Business" value="business" />
-            </Picker>
-          </View>
-          <TouchableOpacity
-            style={[
-              styles.enhanceButton,
-              { backgroundColor: theme.colors.primary },
-            ]}
-            onPress={handleEnhance}
-            disabled={isEnhancing}
-          >
-            <Text style={[styles.enhanceButtonText, { color: '#fff' }]}>
-              {t('generateStory', 'Generate Full Story')}
-            </Text>
-          </TouchableOpacity>
-        </>
-      )}
-      <TouchableOpacity style={styles.ttsButton} onPress={handleTts}>
-        {isPlayingTts ? (
-          <Pause size={20} color={theme.colors.text} />
-        ) : (
-          <Play size={20} color={theme.colors.text} />
-        )}
-        <Text style={[styles.buttonText, { color: theme.colors.text }]}>
-          {isPlayingTts
-            ? t('pauseStory', 'Pause Story')
-            : t('playStory', 'Play Story')}
-        </Text>
-      </TouchableOpacity>
-      {isEnhancing && (
-        <View style={styles.loaderContainer}>
-          <TextGenerationLoader visible={isEnhancing} />
-        </View>
-      )}
-    </View>
-  );
+  const PlaygroundTab = () => {
+    const [localStory, setLocalStory] = useState<string | null>(null);
+    const [isGenerating, setIsGenerating] = useState(false);
 
+    const handleGenerateStory = useCallback(async () => {
+      if (!storyData) return;
+      setIsGenerating(true);
+      try {
+        const response = await axios.post(
+          'https://api.gemini.com/v1/generate', // Replace with actual Gemini API endpoint
+          {
+            prompt: `Generate a ${selectedStyle} style story about ${storyData.location}. Original story: ${storyData.story}`,
+            max_tokens: 500,
+            api_key: process.env.EXPO_PUBLIC_GEMINI_API_KEY, // Ensure API key is in .env
+          }
+        );
+        setLocalStory(response.data.text || 'Generated story unavailable');
+      } catch (error: any) {
+        console.error('Generate story error:', error);
+        Alert.alert(
+          t('errorTitle', 'Error'),
+          t('errorGenerateStory', 'Failed to generate story.')
+        );
+      } finally {
+        setIsGenerating(false);
+      }
+    }, [storyData, selectedStyle, t]);
+
+    return (
+      <View
+        style={[
+          styles.container,
+          { backgroundColor: theme.colors.background, padding: 20 },
+        ]}
+      >
+        <View style={styles.stylePicker}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+            {t('textStyle', 'Text Style')}
+          </Text>
+          <Picker
+            selectedValue={selectedStyle}
+            style={[styles.picker, { color: theme.colors.text }]}
+            onValueChange={(itemValue) => setSelectedStyle(itemValue)}
+          >
+            <Picker.Item label="Narrative" value="narrative" />
+            <Picker.Item label="Fairy Tale" value="fairy_tale" />
+            <Picker.Item label="Business" value="business" />
+          </Picker>
+        </View>
+        <TouchableOpacity
+          style={[
+            styles.enhanceButton,
+            { backgroundColor: theme.colors.primary },
+          ]}
+          onPress={handleGenerateStory}
+          disabled={isGenerating}
+        >
+          <Text style={[styles.enhanceButtonText, { color: '#fff' }]}>
+            {t('generateStory', 'Generate Story')}
+          </Text>
+        </TouchableOpacity>
+        {localStory && (
+          <View style={styles.generatedStory}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+              {t('generatedStory', 'Generated Story')}
+            </Text>
+            <Text style={[styles.storyContent, { color: theme.colors.text }]}>
+              {localStory}
+            </Text>
+          </View>
+        )}
+        <TouchableOpacity style={styles.ttsButton} onPress={handleTts}>
+          {isPlayingTts ? (
+            <Pause size={20} color={theme.colors.text} />
+          ) : (
+            <Play size={20} color={theme.colors.text} />
+          )}
+          <Text style={[styles.buttonText, { color: theme.colors.text }]}>
+            {isPlayingTts
+              ? t('pauseStory', 'Pause Story')
+              : t('playStory', 'Play Story')}
+          </Text>
+        </TouchableOpacity>
+        {isGenerating && (
+          <View style={styles.loaderContainer}>
+            <TextGenerationLoader visible={isGenerating} />
+          </View>
+        )}
+      </View>
+    );
+  };
   const renderScene = SceneMap({
     story: StoryTab,
     playground: PlaygroundTab,
@@ -762,6 +796,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     lineHeight: 36,
   },
+  generatedStory: { marginTop: 20, marginBottom: 20 },
   loaderContainer: {
     position: 'absolute',
     top: 0,
