@@ -17,6 +17,14 @@ import {
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import {
+  TabView,
+  SceneMap,
+  TabBar,
+  SceneRendererProps,
+  Route,
+  NavigationState,
+} from 'react-native-tab-view';
+import {
   Zap,
   Heart,
   MessageCircle,
@@ -37,15 +45,6 @@ import { useAuth } from '@clerk/clerk-expo';
 import axios from 'axios';
 import TextGenerationLoader from '@/app/components/TextGenerationLoader';
 import CommentSection from '@/app/components/CommentSection';
-
-// Mock TTS for Expo Go; replace with `import Tts from 'react-native-tts'` in development build
-const Tts = {
-  setDefaultLanguage: (lang: string) =>
-    console.log(`Mock TTS: Setting language to ${lang}`),
-  speak: (text: string) =>
-    console.log(`Mock TTS: Speaking - ${text.substring(0, 50)}...`),
-  stop: () => console.log('Mock TTS: Stopped'),
-};
 
 const { width } = Dimensions.get('window');
 
@@ -70,6 +69,18 @@ type StoryData = {
   isEnhanced?: boolean;
 };
 
+type MyRoute = Route & {
+  key: string;
+  title: string;
+};
+
+const Tts = {
+  setDefaultLanguage: (lang: string) =>
+    console.log(`Mock TTS: Setting language to ${lang}`),
+  speak: (text: string) =>
+    console.log(`Mock TTS: Speaking - ${text.substring(0, 50)}...`),
+  stop: () => console.log('Mock TTS: Stopped'),
+};
 
 export default function StoryScreen() {
   const { theme } = useTheme();
@@ -92,7 +103,6 @@ export default function StoryScreen() {
     }
     return null;
   });
-
   const [isLiked, setIsLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
   const [commentsCount, setCommentsCount] = useState(0);
@@ -102,6 +112,11 @@ export default function StoryScreen() {
   const [isPlayingTts, setIsPlayingTts] = useState(false);
   const [selectedStyle, setSelectedStyle] = useState('narrative');
   const [showLikeAnimation, setShowLikeAnimation] = useState(false);
+  const [index, setIndex] = useState(0);
+  const [routes] = useState([
+    { key: 'story', title: t('story', 'Story') },
+    { key: 'playground', title: t('playground', 'Playground') },
+  ]);
 
   useEffect(() => {
     setIsLiked(storyData?.isLiked ?? false);
@@ -137,7 +152,8 @@ export default function StoryScreen() {
           initialText: storyData.story,
           coordinates: storyData.coordinates,
           style: selectedStyle,
-        }
+        },
+        { headers: { 'x-clerk-user-id': userId } }
       );
       setStoryData(response.data);
     } catch (error: any) {
@@ -152,7 +168,7 @@ export default function StoryScreen() {
     } finally {
       setIsEnhancing(false);
     }
-  }, [storyData, selectedStyle, t]);
+  }, [storyData, selectedStyle, t, userId]);
 
   const handleShare = async () => {
     if (!storyData) return;
@@ -182,6 +198,7 @@ export default function StoryScreen() {
         method: originalLiked ? 'DELETE' : 'POST',
         url: `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/stories/${storyData.storyId}/like`,
         data: { userClerkId: userId },
+        headers: { 'x-clerk-user-id': userId },
       });
       if (response.status === 201 || response.status === 200) {
         setShowLikeAnimation(true);
@@ -216,7 +233,8 @@ export default function StoryScreen() {
     try {
       await axios.post(
         `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/stories/${storyData.storyId}/comment`,
-        { userClerkId: userId, text: commentText }
+        { userClerkId: userId, text: commentText },
+        { headers: { 'x-clerk-user-id': userId } }
       );
       setCommentsCount((prev) => prev + 1);
       setCommentText('');
@@ -266,6 +284,235 @@ export default function StoryScreen() {
     }
   };
 
+  const StoryTab = () => (
+    <ScrollView
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      contentContainerStyle={styles.scrollContent}
+    >
+      <View style={styles.titleSection}>
+        <View
+          style={[
+            styles.titleCard,
+            {
+              backgroundColor: theme.colors.card,
+              borderColor: theme.colors.border,
+            },
+          ]}
+        >
+          <Text style={[styles.storyTitle, { color: theme.colors.text }]}>
+            {storyData?.title}
+          </Text>
+          <View style={styles.locationInfo}>
+            <MapPin size={16} color={theme.colors.primary} />
+            <Text
+              style={[styles.locationText, { color: theme.colors.primary }]}
+            >
+              {storyData?.location}
+            </Text>
+          </View>
+          <View style={styles.storyMeta}>
+            {storyData?.readTime && (
+              <View style={styles.metaItem}>
+                <Clock size={14} color={theme.colors.textSecondary} />
+                <Text
+                  style={[
+                    styles.metaText,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  {storyData.readTime}
+                </Text>
+              </View>
+            )}
+            {storyData?.country && storyData.city && (
+              <View style={styles.metaItem}>
+                <MapPin size={14} color={theme.colors.textSecondary} />
+                <Text
+                  style={[
+                    styles.metaText,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  Located: {storyData.country}, {storyData.city}
+                </Text>
+              </View>
+            )}
+            {storyData?.distance && (
+              <View style={styles.metaItem}>
+                <Target size={14} color={theme.colors.textSecondary} />
+                <Text
+                  style={[
+                    styles.metaText,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  {storyData.distance} to {storyData.title}
+                </Text>
+              </View>
+            )}
+            {storyData?.source === 'database' && (
+              <View style={styles.metaItem}>
+                <BookOpen size={14} color={theme.colors.textSecondary} />
+                <Text
+                  style={[
+                    styles.metaText,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  {storyData.isEnhanced
+                    ? t('fullStory', 'Full Story')
+                    : t('previewStory', 'Story Preview')}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </View>
+
+      {coordinates && (
+        <View style={styles.mapSection}>
+          <MapView
+            provider={PROVIDER_GOOGLE}
+            style={styles.map}
+            initialRegion={{
+              ...coordinates,
+              latitudeDelta: 0.01,
+              longitudeDelta: 0.01,
+            }}
+          >
+            <Marker coordinate={coordinates} pinColor={theme.colors.primary} />
+          </MapView>
+        </View>
+      )}
+
+      <View style={styles.storySection}>
+        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+          {t('story', 'Story')}
+        </Text>
+        <Text style={[styles.storyContent, { color: theme.colors.text }]}>
+          {storyData?.story}
+        </Text>
+      </View>
+
+      {storyData?.funFacts && storyData.funFacts.length > 0 && (
+        <View style={styles.factsSection}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+            {t('interestingFacts', 'Interesting Facts')}
+          </Text>
+          {storyData.funFacts.map((fact, index) => (
+            <View key={index} style={styles.factItem}>
+              <Star
+                size={16}
+                color={theme.colors.warning}
+                style={styles.factIcon}
+              />
+              <Text
+                style={[styles.factText, { color: theme.colors.textSecondary }]}
+              >
+                {fact}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {storyData?.sources && storyData.sources.length > 0 && (
+        <View style={styles.sourcesSection}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+            {t('sources', 'Sources')}
+          </Text>
+          {storyData.sources.map((source, index) => (
+            <TouchableOpacity
+              key={index}
+              style={[
+                styles.sourceButton,
+                {
+                  backgroundColor: theme.colors.card,
+                  borderColor: theme.colors.border,
+                },
+              ]}
+              onPress={() => handleSourcePress(source)}
+            >
+              <Text
+                style={[styles.sourceText, { color: theme.colors.primary }]}
+              >
+                {source}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      <CommentSection
+        storyId={storyData?.storyId}
+        commentsCount={commentsCount}
+        setCommentsCount={setCommentsCount}
+      />
+    </ScrollView>
+  );
+
+  const PlaygroundTab = () => (
+    <View
+      style={[
+        styles.container,
+        { backgroundColor: theme.colors.background, padding: 20 },
+      ]}
+    >
+      {!storyData?.isEnhanced && (
+        <>
+          <View style={styles.stylePicker}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+              {t('textStyle', 'Text Style')}
+            </Text>
+            <Picker
+              selectedValue={selectedStyle}
+              style={[styles.picker, { color: theme.colors.text }]}
+              onValueChange={(itemValue) => setSelectedStyle(itemValue)}
+            >
+              <Picker.Item label="Narrative" value="narrative" />
+              <Picker.Item label="Fairy Tale" value="fairy_tale" />
+              <Picker.Item label="Business" value="business" />
+            </Picker>
+          </View>
+          <TouchableOpacity
+            style={[
+              styles.enhanceButton,
+              { backgroundColor: theme.colors.primary },
+            ]}
+            onPress={handleEnhance}
+            disabled={isEnhancing}
+          >
+            <Text style={[styles.enhanceButtonText, { color: '#fff' }]}>
+              {t('generateStory', 'Generate Full Story')}
+            </Text>
+          </TouchableOpacity>
+        </>
+      )}
+      <TouchableOpacity style={styles.ttsButton} onPress={handleTts}>
+        {isPlayingTts ? (
+          <Pause size={20} color={theme.colors.text} />
+        ) : (
+          <Play size={20} color={theme.colors.text} />
+        )}
+        <Text style={[styles.buttonText, { color: theme.colors.text }]}>
+          {isPlayingTts
+            ? t('pauseStory', 'Pause Story')
+            : t('playStory', 'Play Story')}
+        </Text>
+      </TouchableOpacity>
+      {isEnhancing && (
+        <View style={styles.loaderContainer}>
+          <TextGenerationLoader visible={isEnhancing} />
+        </View>
+      )}
+    </View>
+  );
+
+  const renderScene = SceneMap({
+    story: StoryTab,
+    playground: PlaygroundTab,
+  });
+
   if (!storyData) {
     return (
       <View
@@ -282,348 +529,105 @@ export default function StoryScreen() {
     );
   }
 
-  const isStorySaved = storyData.source === 'database';
-
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.flexContainer}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
     >
-      <ScrollView
-        style={[styles.container, { backgroundColor: theme.colors.background }]}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.titleSection}>
+      <TabView
+        navigationState={{ index, routes }}
+        renderScene={renderScene}
+        onIndexChange={setIndex}
+        initialLayout={{ width }}
+        renderTabBar={(
+          props: SceneRendererProps & {
+            navigationState: NavigationState<MyRoute>;
+          }
+        ) => (
+          <TabBar
+            {...props}
+            style={{ backgroundColor: theme.colors.card }}
+            indicatorStyle={{ backgroundColor: theme.colors.primary }}
+            activeColor={theme.colors.primary}
+            inactiveColor={theme.colors.text}
+            // labelStyle={{ fontWeight: 'bold' }}
+          />
+        )}
+      />
+      {storyData.isEnhanced && (
+        <View
+          style={[
+            styles.interactionSection,
+            { paddingHorizontal: 20, backgroundColor: theme.colors.background },
+          ]}
+        >
           <View
             style={[
-              styles.titleCard,
+              styles.interactionCard,
               {
                 backgroundColor: theme.colors.card,
                 borderColor: theme.colors.border,
               },
             ]}
           >
-            <Text style={[styles.storyTitle, { color: theme.colors.text }]}>
-              {storyData.title}
-            </Text>
-            <View style={styles.locationInfo}>
-              <MapPin size={16} color={theme.colors.primary} />
-              <Text
-                style={[styles.locationText, { color: theme.colors.primary }]}
+            <View style={styles.interactionRow}>
+              <TouchableOpacity
+                style={styles.interactionButton}
+                onPress={handleLike}
               >
-                {storyData.location}
-              </Text>
-            </View>
-            <View style={styles.storyMeta}>
-              {storyData.readTime && (
-                <View style={styles.metaItem}>
-                  <Clock size={14} color={theme.colors.textSecondary} />
-                  <Text
-                    style={[
-                      styles.metaText,
-                      { color: theme.colors.textSecondary },
-                    ]}
-                  >
-                    {storyData.readTime}
-                  </Text>
-                </View>
-              )}
-              {storyData.country && storyData.city && (
-                <View style={styles.metaItem}>
-                  <MapPin size={14} color={theme.colors.textSecondary} />
-                  <Text
-                    style={[
-                      styles.metaText,
-                      { color: theme.colors.textSecondary },
-                    ]}
-                  >
-                    Located: {storyData.country}, {storyData.city}
-                  </Text>
-                </View>
-              )}
-              {storyData.distance && (
-                <View style={styles.metaItem}>
-                  <Target size={14} color={theme.colors.textSecondary} />
-                  <Text
-                    style={[
-                      styles.metaText,
-                      { color: theme.colors.textSecondary },
-                    ]}
-                  >
-                    {storyData.distance} to {storyData.title}
-                  </Text>
-                </View>
-              )}
-              {isStorySaved && (
-                <View style={styles.metaItem}>
-                  <BookOpen size={14} color={theme.colors.textSecondary} />
-                  <Text
-                    style={[
-                      styles.metaText,
-                      { color: theme.colors.textSecondary },
-                    ]}
-                  >
-                    {storyData.isEnhanced
-                      ? t('fullStory', 'Full Story')
-                      : t('previewStory', 'Story Preview')}
-                  </Text>
-                </View>
-              )}
-            </View>
-          </View>
-        </View>
-
-        {coordinates && (
-          <View style={styles.mapSection}>
-            <MapView
-              provider={PROVIDER_GOOGLE}
-              style={styles.map}
-              initialRegion={{
-                ...coordinates,
-                latitudeDelta: 0.01,
-                longitudeDelta: 0.01,
-              }}
-            >
-              <Marker
-                coordinate={coordinates}
-                pinColor={theme.colors.primary}
-              />
-            </MapView>
-          </View>
-        )}
-
-        <View style={styles.storySection}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-            {t('story', 'Story')}
-          </Text>
-          <Text style={[styles.storyContent, { color: theme.colors.text }]}>
-            {storyData.story}
-          </Text>
-        </View>
-
-        {isEnhancing && (
-          <View style={styles.loaderContainer}>
-            <TextGenerationLoader visible={isEnhancing} />
-          </View>
-        )}
-
-        {storyData.funFacts && storyData.funFacts.length > 0 && (
-          <View style={styles.factsSection}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-              {t('interestingFacts', 'Interesting Facts')}
-            </Text>
-            {storyData.funFacts.map((fact, index) => (
-              <View key={index} style={styles.factItem}>
-                <Star
-                  size={16}
-                  color={theme.colors.warning}
-                  style={styles.factIcon}
+                <Heart
+                  size={20}
+                  color={
+                    isLiked ? theme.colors.error : theme.colors.textSecondary
+                  }
+                  fill={isLiked ? theme.colors.error : 'transparent'}
                 />
                 <Text
                   style={[
-                    styles.factText,
+                    styles.interactionText,
+                    {
+                      color: isLiked
+                        ? theme.colors.error
+                        : theme.colors.textSecondary,
+                    },
+                  ]}
+                >
+                  {likesCount}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.interactionButton}
+                onPress={() => setCommentModalVisible(true)}
+              >
+                <MessageCircle size={20} color={theme.colors.textSecondary} />
+                <Text
+                  style={[
+                    styles.interactionText,
                     { color: theme.colors.textSecondary },
                   ]}
                 >
-                  {fact}
-                </Text>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {storyData.sources && storyData.sources.length > 0 && (
-          <View style={styles.sourcesSection}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-              {t('sources', 'Sources')}
-            </Text>
-            {storyData.sources.map((source, index) => (
-              <TouchableOpacity
-                key={index}
-                style={[
-                  styles.sourceButton,
-                  {
-                    backgroundColor: theme.colors.card,
-                    borderColor: theme.colors.border,
-                  },
-                ]}
-                onPress={() => handleSourcePress(source)}
-              >
-                <Text
-                  style={[styles.sourceText, { color: theme.colors.primary }]}
-                >
-                  {source}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-
-        <View style={styles.interactionSection}>
-          {!storyData.isEnhanced && (
-            <>
-              <View style={styles.stylePicker}>
-                <Text
-                  style={[styles.sectionTitle, { color: theme.colors.text }]}
-                >
-                  {t('textStyle', 'Text Style')}
-                </Text>
-                <Picker
-                  selectedValue={selectedStyle}
-                  style={[styles.picker, { color: theme.colors.text }]}
-                  onValueChange={(itemValue) => setSelectedStyle(itemValue)}
-                >
-                  <Picker.Item label="Narrative" value="narrative" />
-                  <Picker.Item label="Fairy Tale" value="fairy_tale" />
-                  <Picker.Item label="Business" value="business" />
-                </Picker>
-              </View>
-              <TouchableOpacity style={styles.ttsButton} onPress={handleTts}>
-                {isPlayingTts ? (
-                  <Pause size={20} color={theme.colors.text} />
-                ) : (
-                  <Play size={20} color={theme.colors.text} />
-                )}
-                <Text style={[styles.buttonText, { color: theme.colors.text }]}>
-                  {isPlayingTts
-                    ? t('pauseStory', 'Pause Story')
-                    : t('playStory', 'Play Story')}
+                  {commentsCount}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[
-                  styles.enhanceButton,
-                  { backgroundColor: theme.colors.primary },
-                ]}
-                onPress={handleEnhance}
-                disabled={isEnhancing}
-              ></TouchableOpacity>
-            </>
-          )}
-
-          {storyData.isEnhanced && (
-            <>
-              <TouchableOpacity style={styles.ttsButton} onPress={handleTts}>
-                {isPlayingTts ? (
-                  <Pause size={20} color={theme.colors.text} />
-                ) : (
-                  <Play size={20} color={theme.colors.text} />
-                )}
-                <Text style={[styles.buttonText, { color: theme.colors.text }]}>
-                  {isPlayingTts
-                    ? t('pauseStory', 'Pause Story')
-                    : t('playStory', 'Play Story')}
+                style={styles.interactionButton}
+                onPress={handleShare}
+              >
+                <Share2 size={20} color={theme.colors.textSecondary} />
+                <Text
+                  style={[
+                    styles.interactionText,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  {t('share', 'Share')}
                 </Text>
               </TouchableOpacity>
-              <View
-                style={[
-                  styles.interactionCard,
-                  {
-                    backgroundColor: theme.colors.card,
-                    borderColor: theme.colors.border,
-                  },
-                ]}
-              >
-                <View style={styles.interactionRow}>
-                  <TouchableOpacity
-                    style={styles.interactionButton}
-                    onPress={handleLike}
-                  >
-                    <Heart
-                      size={20}
-                      color={
-                        isLiked
-                          ? theme.colors.error
-                          : theme.colors.textSecondary
-                      }
-                      fill={isLiked ? theme.colors.error : 'transparent'}
-                    />
-                    <Text
-                      style={[
-                        styles.interactionText,
-                        {
-                          color: isLiked
-                            ? theme.colors.error
-                            : theme.colors.textSecondary,
-                        },
-                      ]}
-                    >
-                      {likesCount}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.interactionButton}
-                    onPress={() => setCommentModalVisible(true)}
-                  >
-                    <MessageCircle
-                      size={20}
-                      color={theme.colors.textSecondary}
-                    />
-                    <Text
-                      style={[
-                        styles.interactionText,
-                        { color: theme.colors.textSecondary },
-                      ]}
-                    >
-                      {commentsCount}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.interactionButton}
-                    onPress={handleShare}
-                  >
-                    <Share2 size={20} color={theme.colors.textSecondary} />
-                    <Text
-                      style={[
-                        styles.interactionText,
-                        { color: theme.colors.textSecondary },
-                      ]}
-                    >
-                      {t('share', 'Share')}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </>
-          )}
+            </View>
+          </View>
         </View>
-
-        {storyData.relatedQuests && storyData.relatedQuests.length > 0 && (
-          <View style={styles.questsSection}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-              {t('relatedQuests', 'Related Quests')}
-            </Text>
-            {storyData.relatedQuests.map((quest, index) => (
-              <View key={index} style={styles.questItem}>
-                <Target
-                  size={16}
-                  color={theme.colors.warning}
-                  style={styles.factIcon}
-                />
-                <View>
-                  <Text
-                    style={[styles.questTitle, { color: theme.colors.text }]}
-                  >
-                    {quest.title}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.questDescription,
-                      { color: theme.colors.textSecondary },
-                    ]}
-                  >
-                    {quest.description}
-                  </Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
-      </ScrollView>
-
+      )}
       <Modal
         animationType="slide"
         transparent={true}
@@ -688,7 +692,6 @@ export default function StoryScreen() {
           </TouchableOpacity>
         </KeyboardAvoidingView>
       </Modal>
-
       <Modal
         animationType="fade"
         transparent={true}
@@ -736,7 +739,9 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 16,
   },
+
   locationText: { fontSize: 16, fontWeight: '600' },
+  labelStyle: { fontSize: 16, fontWeight: '600', color: '#333' },
   storyMeta: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -772,7 +777,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginBottom: 8,
     alignItems: 'center',
-    backgroundColor: '#f0f0f0', // Light background for button-like appearance
+    backgroundColor: '#f0f0f0',
   },
   sourceText: {
     fontSize: 14,

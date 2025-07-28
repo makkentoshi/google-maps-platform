@@ -122,11 +122,11 @@ export default function MapScreen() {
         fetchedPlaces.map(async (place: any) => {
           const [avgResponse, googleResponse] = await Promise.all([
             axios.get(
-              `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/ratings/average?placeId=${place.placeId}`
+              `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/ratings?placeId=${place.placeId}`   ///
             ),
-            place.googlePlaceId
+            place.placeId // was googlePlaceId
               ? axios.get(
-                  `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/places/google-rating?placeId=${place.googlePlaceId}`
+                  `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/places?placeId=${place.placeId}`
                 )
               : Promise.resolve({ data: { googleRating: 0 } }),
           ]);
@@ -171,11 +171,11 @@ export default function MapScreen() {
         fetchedPlaces.map(async (place: any) => {
           const [avgResponse, googleResponse] = await Promise.all([
             axios.get(
-              `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/ratings/average?placeId=${place.placeId}`
+              `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/ratings?placeId=${place.placeId}`
             ),
-            place.googlePlaceId
+            place.placeId // was googlePlaceId
               ? axios.get(
-                  `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/places/google-rating?placeId=${place.googlePlaceId}`
+                  `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/places?placeId=${place.placeId}`
                 )
               : Promise.resolve({ data: { googleRating: 0 } }),
           ]);

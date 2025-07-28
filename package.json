@@ -47,20 +47,24 @@
     "react-native-gesture-handler": "~2.24.0",
     "react-native-map-clustering": "^4.0.0",
     "react-native-maps": "1.20.1",
+    "react-native-pager-view": "^6.8.1",
     "react-native-picker-select": "^9.3.1",
     "react-native-reanimated": "~3.17.4",
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.11.1",
     "react-native-svg": "15.11.2",
+    "react-native-tab-view": "^4.1.2",
     "react-native-tts": "^4.1.1",
     "react-native-url-polyfill": "^2.0.0",
     "react-native-web": "^0.20.0",
-    "react-native-webview": "13.13.5"
+    "react-native-webview": "13.13.5",
+    "use-debounce": "^10.0.5"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@types/react": "~19.0.10",
     "@types/react-native": "^0.72.8",
+    "@types/react-native-tab-view": "^1.0.6",
     "typescript": "~5.8.3"
   }
 }

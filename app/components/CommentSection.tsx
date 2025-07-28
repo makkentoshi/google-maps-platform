@@ -1,154 +1,104 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  FlatList,
+  StyleSheet,
+  ActivityIndicator,
+} from 'react-native';
+import axios from 'axios';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { Image } from 'react-native';
+import { useAuth } from '@clerk/clerk-expo';
+import { Dispatch, SetStateAction } from 'react';
 
-export interface Comment {
+type Comment = {
   id: string;
-  text: string;
+  content: string;
+  userId: string;
   createdAt: string;
-  user: {
-    clerkId: string;
-    username?: string;
-    avatar?: string;
-  };
-}
+};
 
-interface CommentsSectionProps {
-  comments: Comment[];
-  isLoading: boolean;
-  onAddComment?: () => void; // Опциональный callback
-}
+type CommentsSectionProps = {
+  storyId?: string;
+  commentsCount: number;
+  setCommentsCount: Dispatch<SetStateAction<number>>;
+};
 
-export default function CommentsSection({ 
-  comments, 
-  isLoading,
-  onAddComment 
+export default function CommentSection({
+  storyId,
+  commentsCount,
+  setCommentsCount,
 }: CommentsSectionProps) {
   const { theme } = useTheme();
   const { t } = useLanguage();
+  const { userId } = useAuth();
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
+  useEffect(() => {
+    if (storyId) {
+      fetchComments();
+    }
+  }, [storyId]);
+
+  const fetchComments = async () => {
+    setIsLoading(true);
+    try {
+      const response = await axios.get(
+        `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/stories/${storyId}/comment`,
+        { headers: { 'x-clerk-user-id': userId } }
+      );
+      setComments(response.data.comments || []);
+      setCommentsCount(response.data.comments?.length || 0);
+    } catch (error: any) {
+      console.error(
+        'Fetch comments error:',
+        error.response?.data || error.message
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <Text style={[styles.title, { color: theme.colors.text }]}>
-        {t('comments')} ({comments.length})
-      </Text>
-      
-      {isLoading && comments.length === 0 ? (
-        <Text style={{ color: theme.colors.text }}>{t('loading')}...</Text>
-      ) : (
-        <FlatList
-          data={comments}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <View style={[
-              styles.commentContainer,
-              { backgroundColor: theme.colors.card }
-            ]}>
-              <View style={styles.commentHeader}>
-                {/* Аватарка пользователя */}
-                {item.user.avatar ? (
-                  <Image 
-                    source={{ uri: item.user.avatar }} 
-                    style={styles.avatar}
+  if (isLoading) {
+    return <ActivityIndicator size="large" color={theme.colors.primary} />;
+  }
 
-                  />
-                ) : (
-                  <View style={[
-                    styles.avatarPlaceholder, 
-                    { backgroundColor: theme.colors.primary }
-                  ]}>
-                    <Text style={styles.avatarText}>
-                      {item.user.username?.charAt(0) || 'U'}
-                    </Text>
-                  </View>
-                )}
-                
-                <View style={styles.userInfo}>
-                  <Text style={[styles.username, { color: theme.colors.primary }]}>
-                    {item.user.username || t('anonymous')}
-                  </Text>
-                  <Text style={[styles.date, { color: theme.colors.textSecondary }]}>
-                    {formatDate(item.createdAt)}
-                  </Text>
-                </View>
-              </View>
-              <Text style={[styles.commentText, { color: theme.colors.text }]}>
-                {item.text}
-              </Text>
-            </View>
-          )}
-          ListEmptyComponent={
-            <Text style={{ color: theme.colors.textSecondary }}>
-              {t('noComments')}
+  return (
+    <View
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+    >
+      <Text style={[styles.title, { color: theme.colors.text }]}>
+        {t('comments', 'Comments')} ({commentsCount})
+      </Text>
+      <FlatList
+        data={comments}
+        renderItem={({ item }) => (
+          <View style={[styles.comment, { borderColor: theme.colors.border }]}>
+            <Text style={[styles.commentText, { color: theme.colors.text }]}>
+              {item.content}
             </Text>
-          }
-        />
-      )}
+            <Text
+              style={[
+                styles.commentDate,
+                { color: theme.colors.textSecondary },
+              ]}
+            >
+              {new Date(item.createdAt).toLocaleDateString()}
+            </Text>
+          </View>
+        )}
+        keyExtractor={(item) => item.id}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 16,
-  },
-  commentContainer: {
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
-  },
-  commentHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 12,
-  },
-  avatarPlaceholder: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    color: 'white',
-    fontWeight: 'bold',
-  },
-  userInfo: {
-    flex: 1,
-  },
-  username: {
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  date: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  commentText: {
-    lineHeight: 20,
-    fontSize: 15,
-  },
+  container: { paddingHorizontal: 20, marginBottom: 32 },
+  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 20 },
+  comment: { padding: 12, borderWidth: 1, borderRadius: 8, marginBottom: 8 },
+  commentText: { fontSize: 14 },
+  commentDate: { fontSize: 12, marginTop: 4 },
 });

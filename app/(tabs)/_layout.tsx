@@ -6,6 +6,8 @@ import {
   Trophy,
   Compass,
   Settings,
+  Search,
+  Award,
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -49,7 +51,18 @@ export default function TabLayout() {
           }}
         />
 
-        {/* 2. Map - справа от explore */}
+        {/* 2. Leaderboard - второй слева */}
+        <Tabs.Screen
+          name="leaderboard"
+          options={{
+            title: t('leaderboard'),
+            tabBarIcon: ({ size, color }) => (
+              <Award size={size} color={color} />
+            ),
+          }}
+        />
+
+        {/* 3. Map - теперь третий */}
         <Tabs.Screen
           name="map"
           options={{
@@ -58,7 +71,7 @@ export default function TabLayout() {
           }}
         />
 
-        {/* 3. Camera - центральная (выделенная) */}
+        {/* 4. Camera - центральная (выделенная) */}
         <Tabs.Screen
           name="index"
           options={{
@@ -84,18 +97,18 @@ export default function TabLayout() {
           }}
         />
 
-        {/* 4. Quests - справа от камеры */}
-        {/* <Tabs.Screen
-          name="quests"
+        {/* 5. Search - справа от камеры */}
+        <Tabs.Screen
+          name="search"
           options={{
-            title: t('quests'),
+            title: t('search'),
             tabBarIcon: ({ size, color }) => (
-              <Trophy size={size} color={color} />
+              <Search size={size} color={color} />
             ),
           }}
-        /> */}
+        />
 
-        {/* 5. Profile - левее settings */}
+        {/* 6. Profile */}
         <Tabs.Screen
           name="profile"
           options={{
@@ -104,7 +117,7 @@ export default function TabLayout() {
           }}
         />
 
-        {/* 6. Settings - самый правый */}
+        {/* 7. Settings - самый правый */}
         <Tabs.Screen
           name="settings"
           options={{
