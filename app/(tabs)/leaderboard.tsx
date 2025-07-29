@@ -264,5 +264,9 @@ const styles = StyleSheet.create({
   mapButtonText: {
     fontSize: 14,
     fontWeight: '600',
+    alignItems: 'center',
+    textAlign: 'center',
+    flex: 1,
+    paddingHorizontal: 8,
   },
 });

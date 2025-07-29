@@ -1,28 +1,31 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import Animated, { 
-  useAnimatedStyle, 
-  useSharedValue, 
-  withRepeat, 
-  withSequence, 
+import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
   withTiming,
-  interpolate,
-  Easing
+  Easing,
 } from 'react-native-reanimated';
 import LoadingOverlay from './LoadingOverlay';
+
+const { height } = Dimensions.get('window');
 
 interface TextGenerationLoaderProps {
   visible: boolean;
 }
 
 const textSteps = [
-  { emoji: '🤖', message: "Brewing some digital magic 🎭" },
-  { emoji: '✍️', message: "Crafting words just for you 📝" },
-  { emoji: '🧠', message: "Thinking really hard right now 💭" },
-  { emoji: '🚀', message: "Launching your content into orbit 🌟" },
+  { emoji: '🤖', message: 'Brewing some digital magic 🎭' },
+  { emoji: '✍️', message: 'Crafting words just for you 📝' },
+  { emoji: '🧠', message: 'Thinking really hard right now 💭' },
+  { emoji: '🚀', message: 'Launching your content into orbit 🌟' },
 ];
 
-export default function TextGenerationLoader({ visible }: TextGenerationLoaderProps) {
+export default function TextGenerationLoader({
+  visible,
+}: TextGenerationLoaderProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const scale = useSharedValue(1);
   const translateY = useSharedValue(0);
@@ -33,7 +36,10 @@ export default function TextGenerationLoader({ visible }: TextGenerationLoaderPr
       // Floating animation
       translateY.value = withRepeat(
         withSequence(
-          withTiming(-10, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
+          withTiming(-10, {
+            duration: 2000,
+            easing: Easing.inOut(Easing.ease),
+          }),
           withTiming(10, { duration: 2000, easing: Easing.inOut(Easing.ease) })
         ),
         -1,
@@ -43,7 +49,10 @@ export default function TextGenerationLoader({ visible }: TextGenerationLoaderPr
       // Pulsing animation
       scale.value = withRepeat(
         withSequence(
-          withTiming(1.1, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
+          withTiming(1.1, {
+            duration: 1500,
+            easing: Easing.inOut(Easing.ease),
+          }),
           withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.ease) })
         ),
         -1,
@@ -61,10 +70,7 @@ export default function TextGenerationLoader({ visible }: TextGenerationLoaderPr
 
   const animatedEmojiStyle = useAnimatedStyle(() => {
     return {
-      transform: [
-        { scale: scale.value },
-        { translateY: translateY.value }
-      ],
+      transform: [{ scale: scale.value }, { translateY: translateY.value }],
     };
   });
 
@@ -76,35 +82,37 @@ export default function TextGenerationLoader({ visible }: TextGenerationLoaderPr
 
   return (
     <LoadingOverlay visible={visible}>
-      <View style={styles.content}>
-        <Animated.Text style={[styles.emoji, animatedEmojiStyle]}>
-          {textSteps[currentStep].emoji}
-        </Animated.Text>
-        
-        <Animated.Text style={[styles.message, animatedTextStyle]}>
-          {textSteps[currentStep].message}
-        </Animated.Text>
-        
-        <View style={styles.progressContainer}>
-          <View style={styles.progressBar}>
-            <Animated.View
-              style={[
-                styles.progressFill,
-                {
-                  width: withRepeat(
-                    withSequence(
-                      withTiming('20%', { duration: 1200 }),
-                      withTiming('80%', { duration: 1200 }),
-                      withTiming('40%', { duration: 1200 })
+      <View style={styles.container}>
+        <View style={styles.content}>
+          <Animated.Text style={[styles.emoji, animatedEmojiStyle]}>
+            {textSteps[currentStep].emoji}
+          </Animated.Text>
+
+          <Animated.Text style={[styles.message, animatedTextStyle]}>
+            {textSteps[currentStep].message}
+          </Animated.Text>
+
+          <View style={styles.progressContainer}>
+            <View style={styles.progressBar}>
+              <Animated.View
+                style={[
+                  styles.progressFill,
+                  {
+                    width: withRepeat(
+                      withSequence(
+                        withTiming('20%', { duration: 1200 }),
+                        withTiming('80%', { duration: 1200 }),
+                        withTiming('40%', { duration: 1200 })
+                      ),
+                      -1,
+                      false
                     ),
-                    -1,
-                    false
-                  ),
-                },
-              ]}
-            />
+                  },
+                ]}
+              />
+            </View>
+            <Text style={styles.progressText}>Generating...</Text>
           </View>
-          <Text style={styles.progressText}>Generating...</Text>
         </View>
       </View>
     </LoadingOverlay>
@@ -112,9 +120,22 @@ export default function TextGenerationLoader({ visible }: TextGenerationLoaderPr
 }
 
 const styles = StyleSheet.create({
+  container: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: '100%',
+    minHeight: height,
+  },
   content: {
     alignItems: 'center',
     justifyContent: 'center',
+    width: '100%',
+    padding: 20,
   },
   emoji: {
     fontSize: 80,
@@ -132,6 +153,7 @@ const styles = StyleSheet.create({
   },
   progressContainer: {
     alignItems: 'center',
+    width: '100%',
   },
   progressBar: {
     width: 200,

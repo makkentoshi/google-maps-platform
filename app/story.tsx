@@ -49,7 +49,6 @@ import CommentSection from '@/app/components/CommentSection';
 import { Linking } from 'react-native';
 
 const { width } = Dimensions.get('window');
-const { theme } = useTheme();
 
 type StoryData = {
   source: 'database' | 'generated';
@@ -840,7 +839,7 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: theme.colors.background,
+    backgroundColor: 'transparent',
   },
   backButton: {
     flexDirection: 'row',
@@ -939,8 +938,8 @@ const styles = StyleSheet.create({
   picker: {
     height: 50,
     width: '100%',
-    color: theme.colors.text,
-    backgroundColor: theme.colors.card,
+    color: '#000',
+    backgroundColor: '#fff',
     borderRadius: 8,
   },
   enhanceButton: {
