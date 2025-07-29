@@ -12,8 +12,8 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
-  Linking,
+  ScrollView,
+  SafeAreaView,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import {
@@ -36,17 +36,20 @@ import {
   Target,
   Play,
   Pause,
+  ArrowLeft,
 } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@clerk/clerk-expo';
 import axios from 'axios';
 import TextGenerationLoader from '@/app/components/TextGenerationLoader';
 import CommentSection from '@/app/components/CommentSection';
+import { Linking } from 'react-native';
 
 const { width } = Dimensions.get('window');
+const { theme } = useTheme();
 
 type StoryData = {
   source: 'database' | 'generated';
@@ -114,7 +117,7 @@ export default function StoryScreen() {
   const [showLikeAnimation, setShowLikeAnimation] = useState(false);
   const [index, setIndex] = useState(0);
   const [routes] = useState<MyRoute[]>([
-    { key: 'story', title: t('story', 'Story') },
+    { key: 'story', title: t('story', 'Full Story') },
     { key: 'playground', title: t('playground', 'Playground') },
   ]);
 
@@ -163,7 +166,7 @@ export default function StoryScreen() {
       );
       Alert.alert(
         t('errorTitle', 'Error'),
-        t('errorEnhanceStory', 'Failed to generate story.')
+        t('errorEnhanceStory', 'Failed to enhance story.')
       );
     } finally {
       setIsEnhancing(false);
@@ -413,7 +416,7 @@ export default function StoryScreen() {
           return (
             <View style={styles.storySection}>
               <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-                {t('story', 'Story')}
+                📖 {t('story', 'Story')}
               </Text>
               <Text style={[styles.storyContent, { color: theme.colors.text }]}>
                 {storyData?.story ||
@@ -426,7 +429,7 @@ export default function StoryScreen() {
           return (
             <View style={styles.factsSection}>
               <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-                {t('interestingFacts', 'Interesting Facts')}
+                🌟 {t('interestingFacts', 'Interesting Facts')}
               </Text>
               {storyData.funFacts.map((fact, index) => (
                 <View key={index} style={styles.factItem}>
@@ -452,7 +455,7 @@ export default function StoryScreen() {
           return (
             <View style={styles.sourcesSection}>
               <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-                {t('sources', 'Sources')}
+                🔗 {t('sources', 'Sources')}
               </Text>
               {storyData.sources.map((source, index) => (
                 <TouchableOpacity
@@ -508,16 +511,26 @@ export default function StoryScreen() {
       setIsGenerating(true);
       try {
         const response = await axios.post(
-          'https://api.gemini.com/v1/generate', // Replace with actual Gemini API endpoint
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${process.env.GOOGLE_AI_API_KEY}`,
           {
-            prompt: `Generate a ${selectedStyle} style story about ${storyData.location}. Original story: ${storyData.story}`,
-            max_tokens: 500,
-            api_key: process.env.EXPO_PUBLIC_GEMINI_API_KEY, // Ensure API key is in .env
+            contents: [
+              {
+                parts: [
+                  {
+                    text: `Generate a ${selectedStyle} style story about ${storyData.location}. Original story: ${storyData.story}`,
+                  },
+                ],
+              },
+            ],
           }
         );
-        setLocalStory(response.data.text || 'Generated story unavailable');
+        const generatedText = response.data.candidates[0].content.parts[0].text;
+        setLocalStory(generatedText || 'Generated story unavailable');
       } catch (error: any) {
-        console.error('Generate story error:', error);
+        console.error(
+          'Generate story error:',
+          error.response?.data || error.message
+        );
         Alert.alert(
           t('errorTitle', 'Error'),
           t('errorGenerateStory', 'Failed to generate story.')
@@ -528,24 +541,43 @@ export default function StoryScreen() {
     }, [storyData, selectedStyle, t]);
 
     return (
-      <View
-        style={[
-          styles.container,
-          { backgroundColor: theme.colors.background, padding: 20 },
-        ]}
+      <ScrollView
+        style={[styles.container, { backgroundColor: theme.colors.background }]}
+        contentContainerStyle={styles.playgroundContent}
       >
+        {!storyData?.isEnhanced && (
+          <>
+            <TouchableOpacity
+              style={[
+                styles.enhanceButton,
+                { backgroundColor: theme.colors.primary },
+              ]}
+              onPress={handleEnhance}
+              disabled={isEnhancing}
+            >
+              <Text style={[styles.enhanceButtonText, { color: '#fff' }]}>
+                🚀 {t('generateFullStory', 'Generate Full Story')}
+              </Text>
+            </TouchableOpacity>
+            {isEnhancing && (
+              <View style={styles.loaderContainer}>
+                <TextGenerationLoader visible={isEnhancing} />
+              </View>
+            )}
+          </>
+        )}
         <View style={styles.stylePicker}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-            {t('textStyle', 'Text Style')}
+            ✍️ {t('textStyle', 'Text Style')}
           </Text>
           <Picker
             selectedValue={selectedStyle}
             style={[styles.picker, { color: theme.colors.text }]}
             onValueChange={(itemValue) => setSelectedStyle(itemValue)}
           >
-            <Picker.Item label="Narrative" value="narrative" />
-            <Picker.Item label="Fairy Tale" value="fairy_tale" />
-            <Picker.Item label="Business" value="business" />
+            <Picker.Item label="📜 Narrative" value="narrative" />
+            <Picker.Item label="🧚 Fairy Tale" value="fairy_tale" />
+            <Picker.Item label="💼 Business" value="business" />
           </Picker>
         </View>
         <TouchableOpacity
@@ -557,13 +589,13 @@ export default function StoryScreen() {
           disabled={isGenerating}
         >
           <Text style={[styles.enhanceButtonText, { color: '#fff' }]}>
-            {t('generateStory', 'Generate Story')}
+            ✨ {t('generateStory', 'Generate Story')}
           </Text>
         </TouchableOpacity>
         {localStory && (
           <View style={styles.generatedStory}>
             <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-              {t('generatedStory', 'Generated Story')}
+              📖 {t('generatedStory', 'Generated Story')}
             </Text>
             <Text style={[styles.storyContent, { color: theme.colors.text }]}>
               {localStory}
@@ -578,8 +610,8 @@ export default function StoryScreen() {
           )}
           <Text style={[styles.buttonText, { color: theme.colors.text }]}>
             {isPlayingTts
-              ? t('pauseStory', 'Pause Story')
-              : t('playStory', 'Play Story')}
+              ? `⏸️ ${t('pauseStory', 'Pause Story')}`
+              : `▶️ ${t('playStory', 'Play Story')}`}
           </Text>
         </TouchableOpacity>
         {isGenerating && (
@@ -587,9 +619,10 @@ export default function StoryScreen() {
             <TextGenerationLoader visible={isGenerating} />
           </View>
         )}
-      </View>
+      </ScrollView>
     );
   };
+
   const renderScene = SceneMap({
     story: StoryTab,
     playground: PlaygroundTab,
@@ -612,11 +645,24 @@ export default function StoryScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.flexContainer}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
+    <SafeAreaView
+      style={[
+        styles.flexContainer,
+        { backgroundColor: theme.colors.background },
+      ]}
     >
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
+          <ArrowLeft size={24} color={theme.colors.text} />
+          <Text style={[styles.backButtonText, { color: theme.colors.text }]}>
+            {t('back', 'Back')}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       <TabView
         navigationState={{ index, routes }}
         renderScene={renderScene}
@@ -636,7 +682,8 @@ export default function StoryScreen() {
           />
         )}
       />
-      {storyData.isEnhanced && (
+
+      {storyData?.isEnhanced && (
         <View
           style={[
             styles.interactionSection,
@@ -709,6 +756,8 @@ export default function StoryScreen() {
           </View>
         </View>
       )}
+
+      {/* Модальные окна */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -765,6 +814,7 @@ export default function StoryScreen() {
           </TouchableOpacity>
         </KeyboardAvoidingView>
       </Modal>
+
       <Modal
         animationType="fade"
         transparent={true}
@@ -779,7 +829,7 @@ export default function StoryScreen() {
           />
         </View>
       </Modal>
-    </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -787,25 +837,28 @@ const styles = StyleSheet.create({
   flexContainer: { flex: 1 },
   container: { flex: 1 },
   center: { justifyContent: 'center', alignItems: 'center' },
-  scrollContent: { paddingTop: 60, paddingBottom: 40 },
-  titleSection: { paddingHorizontal: 20, marginBottom: 24, marginTop: 64 },
+  header: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: theme.colors.background,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  backButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  scrollContent: { paddingTop: 20, paddingBottom: 40 },
+  titleSection: { paddingHorizontal: 20, marginBottom: 24, marginTop: 10 },
   titleCard: { padding: 24, borderRadius: 20, borderWidth: 1 },
   storyTitle: {
     fontSize: 28,
     fontWeight: 'bold',
     marginBottom: 16,
     lineHeight: 36,
-  },
-  generatedStory: { marginTop: 20, marginBottom: 20 },
-  loaderContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 100,
   },
   locationInfo: {
     flexDirection: 'row',
@@ -876,26 +929,53 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   interactionText: { fontSize: 14, fontWeight: '600' },
+  playgroundContent: {
+    padding: 20,
+    paddingTop: 0,
+  },
+  stylePicker: {
+    marginBottom: 20,
+  },
+  picker: {
+    height: 50,
+    width: '100%',
+    color: theme.colors.text,
+    backgroundColor: theme.colors.card,
+    borderRadius: 8,
+  },
   enhanceButton: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 12,
     paddingVertical: 16,
     borderRadius: 16,
-    height: 52,
+    alignItems: 'center',
+    marginBottom: 20,
   },
-  enhanceButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  enhanceButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
   ttsButton: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 12,
     paddingVertical: 16,
-    marginBottom: 16,
+    marginBottom: 20,
   },
-  stylePicker: { marginBottom: 16 },
-  picker: { height: 50, width: 200 },
+  buttonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  generatedStory: { marginBottom: 20 },
+  loaderContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+  },
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -930,7 +1010,6 @@ const styles = StyleSheet.create({
     height: 52,
     justifyContent: 'center',
   },
-  buttonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
   likeAnimationOverlay: {
     flex: 1,
     justifyContent: 'center',

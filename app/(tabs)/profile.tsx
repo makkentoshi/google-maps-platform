@@ -1,146 +1,441 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   View,
   Text,
-  TextInput,
-  TouchableOpacity,
   StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Dimensions,
+  Image,
   Alert,
-  ActivityIndicator,
 } from 'react-native';
-import { useUser, useAuth } from '@clerk/clerk-expo';
-import axios from 'axios';
+import {
+  User as UserIcon,
+  MapPin,
+  Star,
+  Calendar,
+  Settings,
+  Share2,
+  Award,
+  Zap,
+  Clock,
+} from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useUser, useAuth } from '@clerk/clerk-expo';
+
+const { width } = Dimensions.get('window');
+
+const mockUser = {
+  name: 'Alexander Petrov',
+  username: '@alex_explorer',
+  level: 5,
+  xp: 1250,
+  nextLevelXP: 1500,
+  joinDate: 'January 2024',
+  visitedPlaces: 45,
+  totalStories: 28,
+  rating: 4.8,
+  achievements: 15,
+  streak: 7,
+};
+
+const recentActivity = [
+  {
+    id: 1,
+    type: 'place_visited',
+    title: 'Visited Christ the Savior Cathedral',
+    time: '1 day ago',
+    xp: 50,
+  },
+  {
+    id: 2,
+    type: 'story_liked',
+    title: 'Story received 10 likes',
+    time: '3 days ago',
+    xp: 25,
+  },
+];
+
+const topAchievements = [
+  {
+    id: 1,
+    title: 'Moscow Explorer',
+    description: 'Visited 50+ places',
+    icon: 'map',
+  },
+  {
+    id: 2,
+    title: 'Storyteller',
+    description: 'Received 100+ likes',
+    icon: 'star',
+  },
+];
 
 export default function ProfileScreen() {
   const { theme } = useTheme();
   const { t } = useLanguage();
-  const { user } = useUser();
-  const { getToken } = useAuth();
-  const [username, setUsername] = useState(
-    user?.username || user?.firstName || ''
-  );
-  const [email, setEmail] = useState(
-    user?.primaryEmailAddress?.emailAddress || ''
-  );
-  const [isLoading, setIsLoading] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
+  const { user, isLoaded } = useUser();
+  const { signOut } = useAuth();
 
-  const handleSave = async () => {
-    setIsLoading(true);
+  const displayName =
+    isLoaded && user
+      ? user.fullName || user.username || user.primaryEmailAddress?.emailAddress
+      : mockUser.name;
+  const displayEmail =
+    isLoaded && user
+      ? user.primaryEmailAddress?.emailAddress
+      : mockUser.username;
+  const avatarUrl = isLoaded && user && user.imageUrl ? user.imageUrl : null;
+  const joinDate =
+    isLoaded && user && user.createdAt
+      ? new Date(user.createdAt).toLocaleDateString()
+      : mockUser.joinDate;
+
+  const handleSignOut = async () => {
     try {
-      const token = await getToken();
-      const response = await axios.put(
-        `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/user/profile`,
-        { username },
-        {
-          headers: {
-            'x-clerk-user-id': user?.id,
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-      await user?.update({ username });
-      setUsername(response.data.username);
-      setIsEditing(false);
-      Alert.alert(
-        t('success', 'Success'),
-        t('profileUpdated', 'Profile updated successfully')
-      );
-    } catch (error: any) {
-      console.error('Update profile error:', error);
-      Alert.alert(
-        t('errorTitle', 'Error'),
-        error.response?.data?.error ||
-          t('errorUpdateProfile', 'Failed to update profile')
-      );
-    } finally {
-      setIsLoading(false);
+      await signOut();
+    } catch (err) {
+      Alert.alert('Error', 'Failed to sign out.');
     }
   };
 
-  if (!user) {
-    return (
-      <View style={styles.container}>
-        <Text
-          style={[styles.errorText, { color: theme.colors.text || '#000' }]}
-        >
-          {t('errorFetchProfile', 'Failed to load profile')}
-        </Text>
-      </View>
-    );
-  }
+  const progressPercentage = (mockUser.xp / mockUser.nextLevelXP) * 100;
 
   return (
     <View
-      style={[
-        styles.container,
-        { backgroundColor: theme.colors.background || '#fff' },
-      ]}
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
-      <Text style={[styles.title, { color: theme.colors.text || '#000' }]}>
-        {t('profile', 'Profile')}
-      </Text>
-      <TextInput
-        style={[
-          styles.input,
-          {
-            borderColor: theme.colors.border || '#ccc',
-            color: theme.colors.text || '#000',
-          },
-        ]}
-        value={username}
-        onChangeText={setUsername}
-        placeholder={t('username', 'Username')}
-        editable={isEditing}
-      />
-      <TextInput
-        style={[
-          styles.input,
-          {
-            borderColor: theme.colors.border || '#ccc',
-            color: theme.colors.text || '#000',
-          },
-        ]}
-        value={email}
-        editable={false} // Email managed by Clerk
-        placeholder={t('email', 'Email')}
-      />
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity
-          style={[
-            styles.button,
-            { backgroundColor: theme.colors.primary || '#007bff' },
-          ]}
-          onPress={() => setIsEditing(!isEditing)}
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Header */}
+        <View
+          style={[styles.header, { backgroundColor: theme.colors.background }]}
         >
-          <Text style={styles.buttonText}>
-            {isEditing ? t('cancel', 'Cancel') : t('edit', 'Edit')}
-          </Text>
-        </TouchableOpacity>
-        {isEditing && (
+          <View style={styles.headerTop}>
+            <TouchableOpacity
+              style={[
+                styles.settingsButton,
+                { backgroundColor: theme.colors.surface },
+              ]}
+            >
+              <Settings size={24} color={theme.colors.text} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.shareButton,
+                { backgroundColor: theme.colors.surface },
+              ]}
+            >
+              <Share2 size={24} color={theme.colors.text} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.profileInfo}>
+            <View style={styles.avatarContainer}>
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+              ) : (
+                <View
+                  style={[
+                    styles.avatar,
+                    { backgroundColor: theme.colors.primary },
+                  ]}
+                >
+                  <UserIcon size={40} color="#FFFFFF" />
+                </View>
+              )}
+              <View
+                style={[
+                  styles.levelBadge,
+                  {
+                    backgroundColor: `${theme.colors.warning}20`,
+                    borderColor: theme.colors.background,
+                  },
+                ]}
+              >
+                <Zap size={12} color={theme.colors.warning} />
+                <Text
+                  style={[styles.levelText, { color: theme.colors.warning }]}
+                >
+                  {mockUser.level}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={[styles.userName, { color: theme.colors.text }]}>
+              {displayName}
+            </Text>
+            <Text style={[styles.userHandle, { color: theme.colors.primary }]}>
+              {displayEmail}
+            </Text>
+            <View style={styles.joinInfo}>
+              <Calendar size={14} color={theme.colors.textSecondary} />
+              <Text
+                style={[styles.joinText, { color: theme.colors.textSecondary }]}
+              >
+                {t('joinedIn')} {joinDate}
+              </Text>
+            </View>
+          </View>
+
+          <View
+            style={[
+              styles.xpSection,
+              { backgroundColor: theme.colors.surface },
+            ]}
+          >
+            <View style={styles.xpHeader}>
+              <Text style={[styles.xpLabel, { color: theme.colors.text }]}>
+                {t('nextLevel')}
+              </Text>
+              <Text
+                style={[styles.xpProgress, { color: theme.colors.primary }]}
+              >
+                {mockUser.xp} / {mockUser.nextLevelXP} XP
+              </Text>
+            </View>
+            <View
+              style={[styles.xpBar, { backgroundColor: theme.colors.border }]}
+            >
+              <View
+                style={[
+                  styles.xpFill,
+                  {
+                    backgroundColor: theme.colors.primary,
+                    width: `${progressPercentage}%`,
+                  },
+                ]}
+              />
+            </View>
+          </View>
+
           <TouchableOpacity
             style={[
-              styles.button,
+              styles.signOutButton,
+              { backgroundColor: theme.colors.error },
+            ]}
+            onPress={handleSignOut}
+          >
+            <Text style={styles.signOutButtonText}>
+              {t('signOut') || 'Sign Out'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Stats */}
+        <View style={styles.statsContainer}>
+          <View
+            style={[
+              styles.statCard,
               {
-                backgroundColor: theme.colors.primary || '#007bff',
-                marginTop: 16,
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.border,
               },
             ]}
-            onPress={handleSave}
           >
-            <Text style={styles.buttonText}>{t('save', 'Save')}</Text>
+            <MapPin size={24} color={theme.colors.primary} />
+            <Text style={[styles.statNumber, { color: theme.colors.text }]}>
+              {mockUser.visitedPlaces}
+            </Text>
+            <Text
+              style={[styles.statLabel, { color: theme.colors.textSecondary }]}
+            >
+              {t('places')}
+            </Text>
+          </View>
+          <View
+            style={[
+              styles.statCard,
+              {
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
+            <Star size={24} color={theme.colors.success} />
+            <Text style={[styles.statNumber, { color: theme.colors.text }]}>
+              {mockUser.totalStories}
+            </Text>
+            <Text
+              style={[styles.statLabel, { color: theme.colors.textSecondary }]}
+            >
+              {t('stories')}
+            </Text>
+          </View>
+          <View
+            style={[
+              styles.statCard,
+              {
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
+            <Award size={24} color={theme.colors.error} />
+            <Text style={[styles.statNumber, { color: theme.colors.text }]}>
+              {mockUser.achievements}
+            </Text>
+            <Text
+              style={[styles.statLabel, { color: theme.colors.textSecondary }]}
+            >
+              {t('achievements')}
+            </Text>
+          </View>
+        </View>
+
+        {/* Achievements */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+              {t('topAchievements')}
+            </Text>
+            <TouchableOpacity>
+              <Text
+                style={[styles.seeAllText, { color: theme.colors.primary }]}
+              >
+                {t('all')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {topAchievements.map((achievement) => (
+            <View
+              key={achievement.id}
+              style={[
+                styles.achievementCard,
+                {
+                  backgroundColor: theme.colors.card,
+                  borderColor: theme.colors.border,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.achievementIcon,
+                  { backgroundColor: `${theme.colors.warning}20` },
+                ]}
+              >
+                <Award size={24} color={theme.colors.warning} />
+              </View>
+              <View style={styles.achievementInfo}>
+                <Text
+                  style={[
+                    styles.achievementTitle,
+                    { color: theme.colors.text },
+                  ]}
+                >
+                  {achievement.title}
+                </Text>
+                <Text
+                  style={[
+                    styles.achievementDescription,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  {achievement.description}
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.achievementBadge,
+                  { backgroundColor: `${theme.colors.warning}20` },
+                ]}
+              >
+                <Star size={16} color={theme.colors.warning} />
+              </View>
+            </View>
+          ))}
+        </View>
+
+        {/* Recent Activity */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+              {t('recentActivity')}
+            </Text>
+          </View>
+
+          {recentActivity.map((activity) => (
+            <View
+              key={activity.id}
+              style={[
+                styles.activityCard,
+                {
+                  backgroundColor: theme.colors.card,
+                  borderColor: theme.colors.border,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.activityIcon,
+                  { backgroundColor: theme.colors.surface },
+                ]}
+              >
+                {activity.type === 'place_visited' && (
+                  <MapPin size={20} color={theme.colors.success} />
+                )}
+                {activity.type === 'story_liked' && (
+                  <Star size={20} color={theme.colors.warning} />
+                )}
+              </View>
+              <View style={styles.activityInfo}>
+                <Text
+                  style={[styles.activityTitle, { color: theme.colors.text }]}
+                >
+                  {activity.title}
+                </Text>
+                <View style={styles.activityMeta}>
+                  <Clock size={12} color={theme.colors.textSecondary} />
+                  <Text
+                    style={[
+                      styles.activityTime,
+                      { color: theme.colors.textSecondary },
+                    ]}
+                  >
+                    {activity.time}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.activityReward}>
+                <View
+                  style={[
+                    styles.xpBadge,
+                    { backgroundColor: `${theme.colors.warning}20` },
+                  ]}
+                >
+                  <Zap size={12} color={theme.colors.warning} />
+                  <Text
+                    style={[styles.xpText, { color: theme.colors.warning }]}
+                  >
+                    +{activity.xp}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          ))}
+        </View>
+
+        {/* Action Buttons */}
+        <View style={styles.actionsContainer}>
+          <TouchableOpacity
+            style={[
+              styles.actionButton,
+              {
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
+            <MapPin size={20} color={theme.colors.success} />
+            <Text
+              style={[styles.actionButtonText, { color: theme.colors.text }]}
+            >
+              {t('visitedPlaces')}
+            </Text>
           </TouchableOpacity>
-        )}
-      </View>
-      {isLoading && (
-        <ActivityIndicator
-          size="large"
-          color={theme.colors.primary || '#007bff'}
-          style={styles.loading}
-        />
-      )}
+        </View>
+      </ScrollView>
     </View>
   );
 }
@@ -148,40 +443,260 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
+  },
+  header: {
+    paddingTop: 80, // Increased for status bar
+    paddingBottom: 32,
+    paddingHorizontal: 20,
+    alignItems: 'center', // Center title
+  },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 32,
+  },
+  settingsButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  title: {
+  shareButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  profileInfo: {
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  avatarContainer: {
+    position: 'relative',
+    marginBottom: 16,
+  },
+  avatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  levelBadge: {
+    position: 'absolute',
+    bottom: -4,
+    right: -4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 2,
+  },
+  levelText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  userName: {
     fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 16,
-  },
-  input: {
-    width: '100%',
-    padding: 12,
-    borderWidth: 1,
-    borderRadius: 8,
-    marginBottom: 16,
-  },
-  buttonContainer: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  button: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  buttonText: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  errorText: {
-    fontSize: 16,
+    marginBottom: 4,
     textAlign: 'center',
   },
-  loading: {
-    marginTop: 16,
+  userHandle: {
+    fontSize: 16,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  joinInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  joinText: {
+    fontSize: 14,
+  },
+  xpSection: {
+    borderRadius: 16,
+    padding: 20,
+    width: '100%',
+  },
+  xpHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  xpLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  xpProgress: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  xpBar: {
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  xpFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  statNumber: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+  },
+  section: {
+    paddingHorizontal: 20,
+    marginBottom: 24,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  seeAllText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  achievementCard: {
+    marginBottom: 12,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderWidth: 1,
+  },
+  achievementIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  achievementInfo: {
+    flex: 1,
+  },
+  achievementTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  achievementDescription: {
+    fontSize: 14,
+  },
+  achievementBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  activityCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+  },
+  activityIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  activityInfo: {
+    flex: 1,
+  },
+  activityTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  activityMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  activityTime: {
+    fontSize: 12,
+  },
+  activityReward: {
+    alignItems: 'flex-end',
+  },
+  xpBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  xpText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  actionsContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 32,
+    gap: 12,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+  },
+  actionButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  signOutButton: {
+    marginTop: 20,
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  signOutButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
