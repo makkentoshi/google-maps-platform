@@ -26,6 +26,9 @@ type Place = {
   style: string | null;
   createdAt: string;
   isEnhanced: boolean;
+  // Legacy fields for backward compatibility
+  latitude?: number;
+  longitude?: number;
 };
 
 export default function LeaderboardScreen() {
@@ -80,24 +83,38 @@ export default function LeaderboardScreen() {
   };
 
   const handleMapPress = (item: Place) => {
-    console.log('Map press item:', item); // Debug log
+    console.log('Map press item:', item);
+
+    // Get coordinates from either coordinates field or lat/lng fields
+    let coordinatesToUse = null;
+
     if (
       item.coordinates &&
       typeof item.coordinates === 'string' &&
       item.coordinates.includes(',')
     ) {
+      coordinatesToUse = item.coordinates;
+    } else if (item.latitude && item.longitude) {
+      // Legacy support: convert lat/lng to coordinates string
+      coordinatesToUse = `${item.latitude},${item.longitude}`;
+    }
+
+    if (coordinatesToUse) {
       router.push({
         pathname: '/map',
-        params: {
-          coordinates: item.coordinates,
-        },
+        params: { coordinates: coordinatesToUse },
       });
     } else {
       console.warn(
         'No valid coordinates for item:',
         item.name,
-        item.coordinates
+        'coordinates:',
+        item.coordinates,
+        'lat/lng:',
+        item.latitude,
+        item.longitude
       );
+      // Still navigate to map but without specific coordinates
       router.push('/map');
     }
   };
@@ -136,7 +153,9 @@ export default function LeaderboardScreen() {
         <Text
           style={[styles.placeRating, { color: theme.colors.textSecondary }]}
         >
-          {item.averageRating?.toFixed(1) ?? '0.0'}
+          {item.averageRating && item.averageRating > 0
+            ? item.averageRating.toFixed(1)
+            : t('noReviews', 'No reviews')}
         </Text>
       </View>
       <View style={styles.actionButtons}>

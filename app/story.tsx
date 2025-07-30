@@ -14,6 +14,7 @@ import {
   Platform,
   ScrollView,
   SafeAreaView,
+  Image,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import {
@@ -53,6 +54,7 @@ const { width } = Dimensions.get('window');
 type StoryData = {
   source: 'database' | 'generated';
   storyId?: string;
+  placeId?: string;
   title: string;
   story: string;
   funFacts?: string[];
@@ -69,6 +71,7 @@ type StoryData = {
   style?: string;
   sources?: string[];
   isEnhanced?: boolean;
+  photos?: string[];
 };
 
 type MyRoute = Route & {
@@ -91,12 +94,13 @@ export default function StoryScreen() {
   const params = useLocalSearchParams();
   const { userId } = useAuth();
 
-  // Упрощаем парсинг данных как в PROD версии
   const [storyData, setStoryData] = useState<StoryData | null>(() => {
     if (params.data && typeof params.data === 'string') {
       try {
-        // Простой парсинг без regex как в PROD версии
-        return JSON.parse(params.data);
+        const rawText = params.data as string;
+        const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error('No JSON found in the text');
+        return JSON.parse(jsonMatch[0].trim());
       } catch (e) {
         console.error('Failed to parse story data:', e);
         return null;
@@ -104,7 +108,6 @@ export default function StoryScreen() {
     }
     return null;
   });
-
   const [isLiked, setIsLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
   const [commentsCount, setCommentsCount] = useState(0);
@@ -130,6 +133,45 @@ export default function StoryScreen() {
     };
   }, [storyData]);
 
+  // Fetch photos if we have a placeId
+  useEffect(() => {
+    const fetchPhotos = async () => {
+      if (
+        storyData?.placeId &&
+        (!storyData.photos || storyData.photos.length === 0)
+      ) {
+        try {
+          const response = await axios.get(
+            `https://maps.googleapis.com/maps/api/place/details/json`,
+            {
+              params: {
+                place_id: storyData.placeId,
+                fields: 'photos',
+                key: process.env.EXPO_PUBLIC_GOOGLE_AI_API_KEY,
+              },
+            }
+          );
+
+          if (response.data.result?.photos) {
+            const photoUrls = response.data.result.photos
+              .slice(0, 5)
+              .map(
+                (photo: any) =>
+                  `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${photo.photo_reference}&key=${process.env.EXPO_PUBLIC_GOOGLE_AI_API_KEY}`
+              );
+            setStoryData((prev) =>
+              prev ? { ...prev, photos: photoUrls } : null
+            );
+          }
+        } catch (error) {
+          console.error('Failed to fetch photos:', error);
+        }
+      }
+    };
+
+    fetchPhotos();
+  }, [storyData?.placeId]);
+
   const coordinates = useMemo(() => {
     if (storyData?.coordinates && typeof storyData.coordinates === 'string') {
       const [latitude, longitude] = storyData.coordinates
@@ -143,8 +185,32 @@ export default function StoryScreen() {
   }, [storyData?.coordinates]);
 
   const handleEnhance = useCallback(async () => {
-    if (!storyData || storyData.source !== 'generated' || storyData.isEnhanced)
+    if (!storyData || storyData.isEnhanced) {
+      console.log(
+        '[DEBUG] Выход из handleEnhance: нет данных или история уже полная.'
+      );
       return;
+    }
+
+    if (
+      !storyData.coordinates ||
+      typeof storyData.coordinates !== 'string' ||
+      !storyData.coordinates.includes(',')
+    ) {
+      console.error(
+        'Invalid coordinates for enhancement:',
+        storyData.coordinates
+      );
+      Alert.alert(
+        t('errorTitle', 'Error'),
+        t(
+          'errorInvalidCoordinates',
+          'Cannot enhance story without valid coordinates.'
+        )
+      );
+      return;
+    }
+
     setIsEnhancing(true);
     try {
       const response = await axios.post(
@@ -157,8 +223,7 @@ export default function StoryScreen() {
         },
         { headers: { 'x-clerk-user-id': userId } }
       );
-      console.log('Enhance response:', response.data);
-      setStoryData({ ...response.data, isEnhanced: true });
+      setStoryData(response.data);
     } catch (error: any) {
       console.error(
         'Enhance story error:',
@@ -186,23 +251,37 @@ export default function StoryScreen() {
   };
 
   const handleLike = async () => {
-    if (storyData?.source !== 'database' || !storyData.storyId || !userId) {
+    if (storyData?.source !== 'database' || !storyData.storyId) {
       Alert.alert(
         t('errorTitle', 'Error'),
         t('errorLikeUpdate', 'Cannot like this story.')
       );
       return;
     }
+
+    if (!userId) {
+      Alert.alert(
+        t('errorTitle', 'Error'),
+        t('loginRequired', 'Please log in to like stories.')
+      );
+      return;
+    }
+
     const originalLiked = isLiked;
     setIsLiked(!originalLiked);
     setLikesCount((prev) => (originalLiked ? prev - 1 : prev + 1));
+
     try {
       const response = await axios({
         method: originalLiked ? 'DELETE' : 'POST',
         url: `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/stories/${storyData.storyId}/like`,
         data: { userClerkId: userId },
-        headers: { 'x-clerk-user-id': userId },
+        headers: {
+          'x-clerk-user-id': userId,
+          'Content-Type': 'application/json',
+        },
       });
+
       if (response.status === 201 || response.status === 200) {
         setShowLikeAnimation(true);
         setTimeout(() => setShowLikeAnimation(false), 1000);
@@ -211,44 +290,68 @@ export default function StoryScreen() {
       console.error('Like error:', error.response?.data || error.message);
       setIsLiked(originalLiked);
       setLikesCount((prev) => (originalLiked ? prev + 1 : prev - 1));
-      Alert.alert(
-        t('errorTitle', 'Error'),
-        error.response?.data?.message ||
-          t('errorLikeUpdate', 'Failed to update like status.')
-      );
+
+      let errorMessage = t('errorLikeUpdate', 'Failed to update like status.');
+      if (error.response?.status === 401) {
+        errorMessage = t('loginRequired', 'Please log in to like stories.');
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+
+      Alert.alert(t('errorTitle', 'Error'), errorMessage);
     }
   };
 
   const handlePostComment = async () => {
-    if (
-      !storyData ||
-      storyData.source !== 'database' ||
-      !storyData.storyId ||
-      !userId ||
-      !commentText.trim()
-    ) {
+    if (!storyData || storyData.source !== 'database' || !storyData.storyId) {
       Alert.alert(
         t('errorTitle', 'Error'),
         t('errorComment', 'Cannot post comment.')
       );
       return;
     }
+
+    if (!userId) {
+      Alert.alert(
+        t('errorTitle', 'Error'),
+        t('loginRequired', 'Please log in to post comments.')
+      );
+      return;
+    }
+
+    if (!commentText.trim()) {
+      Alert.alert(
+        t('errorTitle', 'Error'),
+        t('commentRequired', 'Please enter a comment.')
+      );
+      return;
+    }
+
     try {
       await axios.post(
         `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/stories/${storyData.storyId}/comment`,
         { userClerkId: userId, text: commentText },
-        { headers: { 'x-clerk-user-id': userId } }
+        {
+          headers: {
+            'x-clerk-user-id': userId,
+            'Content-Type': 'application/json',
+          },
+        }
       );
       setCommentsCount((prev) => prev + 1);
       setCommentText('');
       setCommentModalVisible(false);
     } catch (error: any) {
       console.error('Comment error:', error.response?.data || error.message);
-      Alert.alert(
-        t('errorTitle', 'Error'),
-        error.response?.data?.message ||
-          t('errorComment', 'Failed to post comment.')
-      );
+
+      let errorMessage = t('errorComment', 'Failed to post comment.');
+      if (error.response?.status === 401) {
+        errorMessage = t('loginRequired', 'Please log in to post comments.');
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+
+      Alert.alert(t('errorTitle', 'Error'), errorMessage);
     }
   };
 
@@ -290,6 +393,9 @@ export default function StoryScreen() {
   const StoryTab = () => {
     const data = [
       { type: 'title' },
+      ...(storyData?.photos && storyData.photos.length > 0
+        ? [{ type: 'photos' }]
+        : []),
       ...(coordinates ? [{ type: 'map' }] : []),
       { type: 'story' },
       ...(storyData?.funFacts && storyData.funFacts.length > 0
@@ -386,6 +492,30 @@ export default function StoryScreen() {
                   )}
                 </View>
               </View>
+            </View>
+          );
+        case 'photos':
+          if (!storyData?.photos || storyData.photos.length === 0) return null;
+          return (
+            <View style={styles.photosSection}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+                📸 {t('photos', 'Photos')}
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.photosContainer}
+              >
+                {storyData.photos.map((photo, index) => (
+                  <TouchableOpacity key={index} style={styles.photoContainer}>
+                    <Image
+                      source={{ uri: photo }}
+                      style={styles.photo}
+                      resizeMode="cover"
+                    />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
             </View>
           );
         case 'map':
@@ -502,7 +632,6 @@ export default function StoryScreen() {
     );
   };
 
-  // Упрощаем Playground tab - убираем AsyncStorage
   const PlaygroundTab = () => {
     const [localStory, setLocalStory] = useState<string | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
@@ -511,27 +640,43 @@ export default function StoryScreen() {
       if (!storyData) return;
       setIsGenerating(true);
       try {
+        // Use your backend API instead of direct Google API call
         const response = await axios.post(
-          `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/enhance-story`,
+          `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/generate-story`,
           {
             placeName: storyData.location,
-            initialText: storyData.story,
-            coordinates: storyData.coordinates,
+            originalStory: storyData.story,
             style: selectedStyle,
+            coordinates: storyData.coordinates,
           },
-          { headers: { 'x-clerk-user-id': userId } }
+          {
+            headers: {
+              'x-clerk-user-id': userId,
+              'Content-Type': 'application/json',
+            },
+          }
         );
-        const generatedStory = response.data.story;
-        setLocalStory(generatedStory);
+
+        const generatedText =
+          response.data.story || response.data.generatedText;
+        setLocalStory(generatedText || 'Generated story unavailable');
       } catch (error: any) {
         console.error(
           'Generate story error:',
           error.response?.data || error.message
         );
-        Alert.alert(
-          t('errorTitle', 'Error'),
-          t('errorGenerateStory', 'Failed to generate story.')
-        );
+
+        let errorMessage = t('errorGenerateStory', 'Failed to generate story.');
+        if (error.response?.status === 503) {
+          errorMessage = t(
+            'serviceOverloaded',
+            'Service is temporarily overloaded. Please try again later.'
+          );
+        } else if (error.response?.data?.message) {
+          errorMessage = error.response.data.message;
+        }
+
+        Alert.alert(t('errorTitle', 'Error'), errorMessage);
       } finally {
         setIsGenerating(false);
       }
@@ -542,63 +687,66 @@ export default function StoryScreen() {
         style={[styles.container, { backgroundColor: theme.colors.background }]}
         contentContainerStyle={styles.playgroundContent}
       >
-        {!storyData?.isEnhanced && (
-          <>
-            <TouchableOpacity
-              style={[
-                styles.enhanceButton,
-                { backgroundColor: theme.colors.primary },
-              ]}
-              onPress={handleEnhance}
-              disabled={isEnhancing}
-            >
-              <Text style={[styles.enhanceButtonText, { color: '#fff' }]}>
-                🚀 {t('generateFullStory', 'Generate Full Story')}
-              </Text>
-            </TouchableOpacity>
-            {isEnhancing && (
-              <View style={styles.loaderContainer}>
-                <TextGenerationLoader visible={isEnhancing} />
-              </View>
-            )}
-          </>
-        )}
-        <View style={styles.stylePicker}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-            ✍️ {t('textStyle', 'Text Style')}
-          </Text>
-          <Picker
-            selectedValue={selectedStyle}
-            style={[styles.picker, { color: theme.colors.text }]}
-            onValueChange={(itemValue) => setSelectedStyle(itemValue)}
-          >
-            <Picker.Item label="📜 Narrative" value="narrative" />
-            <Picker.Item label="🧚 Fairy Tale" value="fairy_tale" />
-            <Picker.Item label="💼 Business" value="business" />
-          </Picker>
-        </View>
-        <TouchableOpacity
-          style={[
-            styles.enhanceButton,
-            { backgroundColor: theme.colors.primary },
-          ]}
-          onPress={handleGenerateStory}
-          disabled={isGenerating}
-        >
-          <Text style={[styles.enhanceButtonText, { color: '#fff' }]}>
-            ✨ {t('generateStory', 'Generate Story')}
-          </Text>
-        </TouchableOpacity>
-        {localStory && (
-          <View style={styles.generatedStory}>
+        <View style={{ flex: 1 }}>
+          {!storyData?.isEnhanced && (
+            <>
+              <TouchableOpacity
+                style={[
+                  styles.enhanceButton,
+                  { backgroundColor: theme.colors.primary },
+                ]}
+                onPress={handleEnhance}
+                disabled={isEnhancing}
+              >
+                <Text style={[styles.enhanceButtonText, { color: '#fff' }]}>
+                  🚀 {t('generateFullStory', 'Generate Full Story')}
+                </Text>
+              </TouchableOpacity>
+              {isEnhancing && (
+                <View style={styles.loaderContainer}>
+                  <TextGenerationLoader visible={isEnhancing} />
+                </View>
+              )}
+            </>
+          )}
+          <View style={styles.stylePicker}>
             <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-              📖 {t('generatedStory', 'Generated Story')}
+              ✍️ {t('textStyle', 'Text Style')}
             </Text>
-            <Text style={[styles.storyContent, { color: theme.colors.text }]}>
-              {localStory}
-            </Text>
+            <Picker
+              selectedValue={selectedStyle}
+              style={[styles.picker, { color: theme.colors.text }]}
+              onValueChange={(itemValue) => setSelectedStyle(itemValue)}
+            >
+              <Picker.Item label="📜 Narrative" value="narrative" />
+              <Picker.Item label="🧚 Fairy Tale" value="fairy_tale" />
+              <Picker.Item label="💼 Business" value="business" />
+            </Picker>
           </View>
-        )}
+
+          <TouchableOpacity
+            style={[
+              styles.enhanceButton,
+              { backgroundColor: theme.colors.primary, marginTop: 20 },
+            ]}
+            onPress={handleGenerateStory}
+            disabled={isGenerating}
+          >
+            <Text style={[styles.enhanceButtonText, { color: '#fff' }]}>
+              ✨ {t('generateStory', 'Generate Story')}
+            </Text>
+          </TouchableOpacity>
+          {localStory && (
+            <View style={styles.generatedStory}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+                📖 {t('generatedStory', 'Generated Story')}
+              </Text>
+              <Text style={[styles.storyContent, { color: theme.colors.text }]}>
+                {localStory}
+              </Text>
+            </View>
+          )}
+        </View>
         <TouchableOpacity style={styles.ttsButton} onPress={handleTts}>
           {isPlayingTts ? (
             <Pause size={20} color={theme.colors.text} />
@@ -754,7 +902,7 @@ export default function StoryScreen() {
         </View>
       )}
 
-      {/* Модальные окна */}
+      {/* Comment Modal */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -812,6 +960,7 @@ export default function StoryScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* Like Animation Modal */}
       <Modal
         animationType="fade"
         transparent={true}
@@ -872,6 +1021,20 @@ const styles = StyleSheet.create({
   },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   metaText: { fontSize: 14, fontWeight: '600' },
+  photosSection: { paddingHorizontal: 20, marginBottom: 32 },
+  photosContainer: {
+    marginTop: 16,
+  },
+  photoContainer: {
+    marginRight: 12,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  photo: {
+    width: 200,
+    height: 150,
+    borderRadius: 12,
+  },
   mapSection: {
     height: 200,
     marginHorizontal: 20,
@@ -927,6 +1090,7 @@ const styles = StyleSheet.create({
   },
   interactionText: { fontSize: 14, fontWeight: '600' },
   playgroundContent: {
+    flexGrow: 1, // Это заставит контейнер занимать всю высоту ScrollView
     padding: 20,
     paddingTop: 0,
   },
