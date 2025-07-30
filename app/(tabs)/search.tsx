@@ -1,219 +1,181 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   TextInput,
   FlatList,
   TouchableOpacity,
+  StyleSheet,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { useRouter } from 'expo-router';
+import { useAuth } from '@clerk/clerk-expo';
 import axios from 'axios';
-import { Star } from 'lucide-react-native';
+import { MapPin } from 'lucide-react-native';
+import { Alert } from 'react-native';
 
-type Place = {
-  id: string;
-  placeId: string;
-  name: string;
-  description: string | null;
-  location: string | null;
-  coordinates: string | null;
-  city: string | null;
-  country: string | null;
-  averageRating: number | null;
-  funFact: string | null;
-  style: string | null;
-  createdAt: string;
-  isEnhanced: boolean;
+type Story = {
+  storyId: string;
+  title: string;
+  location: string;
+  likes: number;
+  comments: number;
+};
+
+type StoryData = {
+  source: 'database' | 'generated';
+  storyId?: string;
+  title: string;
+  story: string;
+  funFacts?: string[];
+  relatedQuests?: any[];
+  location: string;
+  coordinates?: string | null;
+  readTime?: string;
+  likes?: number;
+  comments?: number;
+  isLiked?: boolean;
+  country?: string;
+  city?: string;
+  distance?: string;
+  style?: string;
+  sources?: string[];
+  isEnhanced?: boolean;
 };
 
 export default function SearchScreen() {
   const { theme } = useTheme();
   const { t } = useLanguage();
   const router = useRouter();
+  const { userId } = useAuth();
+
+  const [stories, setStories] = useState<Story[]>([]);
+  const [filteredStories, setFilteredStories] = useState<Story[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [minRating, setMinRating] = useState('');
-  const [places, setPlaces] = useState<Place[]>([]);
+
+  // Исправляем API endpoint - используем тот же что и в map.tsx
+  const fetchStories = useCallback(async () => {
+    try {
+      // Используем places API вместо stories API
+      const response = await axios.get(
+        `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/places/popular`
+        // Убираем заголовки авторизации как в исправленном map.tsx
+      );
+      
+      // Адаптируем данные places под формат stories
+      const placesData = Array.isArray(response.data.places) 
+        ? response.data.places 
+        : [];
+        
+      const storiesData = placesData.map((place: any) => ({
+        storyId: place.id,
+        title: place.title || place.name,
+        location: place.location || place.title || place.name,
+        likes: place.likes || 0,
+        comments: place.comments || 0,
+      }));
+      
+      const sortedStories = storiesData.sort((a: Story, b: Story) =>
+        a.title.localeCompare(b.title)
+      );
+      setStories(sortedStories);
+      setFilteredStories(sortedStories);
+    } catch (error) {
+      console.error('Fetch stories error:', error);
+      Alert.alert(
+        t('errorTitle', 'Error'),
+        t('errorFetchStories', 'Failed to fetch stories.')
+      );
+    }
+  }, [t]);
 
   useEffect(() => {
-    const fetchPlaces = async () => {
-      try {
-        const response = await axios.get(
-          `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/search`,
-          {
-            params: {
-              query: searchQuery,
-              rating: minRating ? parseFloat(minRating) : undefined,
-            },
-          }
-        );
-        setPlaces(response.data.places || []);
-      } catch (error: any) {
-        console.error('Search error:', error);
-        setPlaces([]);
-      }
-    };
+    fetchStories();
+  }, [fetchStories]);
 
-    const debounce = setTimeout(() => {
-      if (searchQuery || minRating) {
-        fetchPlaces();
-      } else {
-        setPlaces([]);
-      }
-    }, 300);
+  // Добавляем функцию поиска
+  useEffect(() => {
+    if (searchQuery.trim() === '') {
+      setFilteredStories(stories);
+    } else {
+      const filtered = stories.filter((story) =>
+        story.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        story.location.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      setFilteredStories(filtered);
+    }
+  }, [searchQuery, stories]);
 
-    return () => clearTimeout(debounce);
-  }, [searchQuery, minRating]);
+  const handleStoryPress = (story: Story) => {
+    // Используем тот же подход что и в map.tsx
+    router.push({
+      pathname: '/story',
+      params: {
+        data: JSON.stringify({
+          id: story.storyId,
+          source: 'database',
+          title: story.title,
+          location: story.location,
+          story: `Story about ${story.title}...`,
+          likes: story.likes,
+          comments: story.comments,
+          isLiked: false,
+        }),
+      },
+    });
+  };
 
-  const renderPlace = ({ item }: { item: Place }) => (
+  const renderStoryItem = ({ item }: { item: Story }) => (
     <TouchableOpacity
       style={[
-        styles.placeCard,
+        styles.storyItem,
         {
           backgroundColor: theme.colors.card,
           borderColor: theme.colors.border,
         },
       ]}
-      onPress={() =>
-        router.push({
-          pathname: '/story',
-          params: {
-            data: JSON.stringify({
-              source: 'database',
-              storyId: item.id,
-              title: item.name,
-              story: item.description || 'No description available',
-              location:
-                item.location || `${item.city || ''}, ${item.country || ''}`,
-              coordinates: item.coordinates || null,
-              funFacts: item.funFact ? [item.funFact] : [],
-              city: item.city || '',
-              country: item.country || '',
-              style: item.style || 'narrative',
-              isEnhanced: item.isEnhanced || false,
-              likes: 0,
-              comments: 0,
-              isLiked: false,
-            }),
-          },
-        })
-      }
+      onPress={() => handleStoryPress(item)}
     >
-      <Text style={[styles.placeName, { color: theme.colors.text }]}>
-        {item.name}
+      <Text style={[styles.storyTitle, { color: theme.colors.text }]}>
+        {item.title}
       </Text>
-      <Text
-        style={[styles.placeDescription, { color: theme.colors.textSecondary }]}
-      >
-        {item.description || t('noDescription', 'No description available')}
-      </Text>
-      <View style={styles.ratingContainer}>
-        {[1, 2, 3, 4, 5].map((star) => (
-          <Star
-            key={star}
-            size={16}
-            color={
-              star <= Math.round(item.averageRating || 0)
-                ? theme.colors.primary
-                : theme.colors.textSecondary
-            }
-            fill={
-              star <= Math.round(item.averageRating || 0)
-                ? theme.colors.primary
-                : 'none'
-            }
-          />
-        ))}
-        <Text
-          style={[styles.ratingText, { color: theme.colors.textSecondary }]}
-        >
-          {item.averageRating?.toFixed(1) ?? '0.0'}
+      <View style={styles.locationRow}>
+        <MapPin size={16} color={theme.colors.primary} />
+        <Text style={[styles.locationText, { color: theme.colors.primary }]}>
+          {item.location}
         </Text>
       </View>
-      <TouchableOpacity
-        style={[styles.viewButton, { backgroundColor: theme.colors.primary }]}
-        onPress={() =>
-          router.push({
-            pathname: '/story',
-            params: {
-              data: JSON.stringify({
-                source: 'database',
-                storyId: item.id,
-                title: item.name,
-                story: item.description || 'No description available',
-                location:
-                  item.location || `${item.city || ''}, ${item.country || ''}`,
-                coordinates: item.coordinates || null,
-                funFacts: item.funFact ? [item.funFact] : [],
-                city: item.city || '',
-                country: item.country || '',
-                style: item.style || 'narrative',
-                isEnhanced: item.isEnhanced || false,
-                likes: 0,
-                comments: 0,
-                isLiked: false,
-              }),
-            },
-          })
-        }
-      >
-        <Text style={styles.viewButtonText}>{t('view', 'View')}</Text>
-      </TouchableOpacity>
+      <View style={styles.statsRow}>
+        <Text style={[styles.statsText, { color: theme.colors.textSecondary }]}>
+          {item.likes} likes • {item.comments} comments
+        </Text>
+      </View>
     </TouchableOpacity>
   );
 
   return (
-    <View
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
-    >
-      <View
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <TextInput
         style={[
-          styles.header,
+          styles.searchInput,
           {
-            backgroundColor: theme.colors.background,
-            borderBottomColor: theme.colors.border,
+            backgroundColor: theme.colors.card,
+            borderColor: theme.colors.border,
+            color: theme.colors.text,
           },
         ]}
-      >
-        <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
-          {t('search', 'Search')}
-        </Text>
-        <Text
-          style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}
-        >
-          {t('searchSubtitle', 'Find places and stories')}
-        </Text>
-      </View>
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={[
-            styles.searchInput,
-            { color: theme.colors.text, borderColor: theme.colors.border },
-          ]}
-          placeholder={t('searchPlaces', 'Search places...')}
-          placeholderTextColor={theme.colors.textSecondary}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-        <TextInput
-          style={[
-            styles.ratingInput,
-            { color: theme.colors.text, borderColor: theme.colors.border },
-          ]}
-          placeholder={t('minRating', 'Minimum Rating (1-5)')}
-          placeholderTextColor={theme.colors.textSecondary}
-          value={minRating}
-          onChangeText={setMinRating}
-          keyboardType="numeric"
-        />
-      </View>
+        placeholder={t('searchPlaceholder', 'Search stories...')}
+        placeholderTextColor={theme.colors.textSecondary}
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+      />
       <FlatList
-        data={places}
-        renderItem={renderPlace}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.resultsContainer}
+        data={filteredStories}
+        renderItem={renderStoryItem}
+        keyExtractor={(item) => item.storyId}
+        contentContainerStyle={styles.listContainer}
+        showsVerticalScrollIndicator={false}
       />
     </View>
   );
@@ -222,74 +184,45 @@ export default function SearchScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  header: {
-    paddingTop: 60,
-    paddingBottom: 24,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-  },
-  headerTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  headerSubtitle: {
-    fontSize: 16,
-  },
-  searchContainer: {
-    padding: 20,
+    paddingTop: 50,
   },
   searchInput: {
-    fontSize: 16,
+    margin: 20,
     padding: 12,
-    borderWidth: 1,
     borderRadius: 8,
-    marginBottom: 16,
-  },
-  ratingInput: {
+    borderWidth: 1,
     fontSize: 16,
-    padding: 12,
-    borderWidth: 1,
-    borderRadius: 8,
   },
-  resultsContainer: {
+  listContainer: {
     paddingHorizontal: 20,
     paddingBottom: 20,
   },
-  placeCard: {
+  storyItem: {
     padding: 16,
     borderRadius: 12,
-    marginBottom: 12,
     borderWidth: 1,
+    marginBottom: 12,
   },
-  placeName: {
+  storyTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 8,
   },
-  placeDescription: {
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  ratingContainer: {
+  locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
     marginBottom: 8,
   },
-  ratingText: {
-    fontSize: 14,
-    marginLeft: 8,
-  },
-  viewButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  viewButtonText: {
-    color: '#FFFFFF',
+  locationText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statsText: {
+    fontSize: 12,
   },
 });

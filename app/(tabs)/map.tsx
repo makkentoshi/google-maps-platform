@@ -24,11 +24,9 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import axios from 'axios';
 import { MapPin, Filter } from 'lucide-react-native';
 import { Linking } from 'react-native';
-// import MapView from 'react-native-map-clustering';
 import ClusteredMapView from 'react-native-map-clustering';
 import { StarRating } from '@/app/components/StarRating';
 import { useLocalSearchParams } from 'expo-router';
-
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -37,16 +35,15 @@ import Animated, {
 
 const { width } = Dimensions.get('window');
 
+// Возвращаем к PROD структуре данных
 type Place = {
   id: string;
-  placeId: string;
-  title: string; // Changed from name to match API
+  placeId: string; // Возвращаем placeId вместо googlePlaceId
+  title: string; // Возвращаем title вместо name
   location: string;
-  coordinates: string | null; // Added to match API
+  coordinates: string | null;
   city: string | null;
   country: string | null;
-  latitude: number | null; // Keep for fallback
-  longitude: number | null; // Keep for fallback
   description: string | null;
   funFact: string | null;
   likes: number;
@@ -55,9 +52,9 @@ type Place = {
   createdAt: string;
   isEnhanced: boolean;
   distance?: string;
-  rating?: number; // Added for user rating
-  averageRating?: number; // Added for average rating
-  googleRating?: number; // Added for Google Places API
+  rating?: number;
+  averageRating?: number;
+  googleRating?: number;
 };
 
 export default function MapScreen() {
@@ -77,18 +74,7 @@ export default function MapScreen() {
   const [zoomLevel, setZoomLevel] = useState(15);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Animation
   const cardScale = useSharedValue(0);
-
-  useEffect(() => {
-    cardScale.value = selectedPlace ? withSpring(1) : withSpring(0);
-  }, [selectedPlace]);
-
-  const animatedCardStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: cardScale.value }],
-    opacity: cardScale.value,
-  }));
-
   const params = useLocalSearchParams();
   const mapRef = useRef<MapView>(null);
 
@@ -117,7 +103,15 @@ export default function MapScreen() {
           longitudeDelta: 0.05,
         };
 
-  // Request location permissions
+  useEffect(() => {
+    cardScale.value = selectedPlace ? withSpring(1) : withSpring(0);
+  }, [selectedPlace]);
+
+  const animatedCardStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: cardScale.value }],
+    opacity: cardScale.value,
+  }));
+
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -156,7 +150,7 @@ export default function MapScreen() {
     }
   }, [initialCoordinates]);
 
-  // Fetch places based on filter
+  // Возвращаем к PROD версии API вызовов
   const fetchPlaces = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -167,29 +161,44 @@ export default function MapScreen() {
             sort: filter === 'recent' ? 'createdAt' : undefined,
             style: filter === 'historical' ? 'narrative' : undefined,
           },
+          // Убираем заголовки авторизации как в PROD версии
         }
       );
       let fetchedPlaces = Array.isArray(response.data.places)
         ? response.data.places
         : [];
-      // Fetch ratings
+
+      // Упрощаем получение рейтингов как в PROD версии
       fetchedPlaces = await Promise.all(
         fetchedPlaces.map(async (place: any) => {
-          const [avgResponse, googleResponse] = await Promise.all([
-            axios.get(
-              `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/ratings?placeId=${place.placeId}`
-            ),
-            place.placeId
-              ? axios.get(
-                  `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/places?placeId=${place.placeId}`
+          try {
+            const [avgResponse, googleResponse] = await Promise.all([
+              axios
+                .get(
+                  `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/ratings?placeId=${place.placeId}`
                 )
-              : Promise.resolve({ data: { googleRating: 0 } }),
-          ]);
-          return {
-            ...place,
-            averageRating: parseFloat(avgResponse.data.averageRating) || 0.0,
-            googleRating: parseFloat(googleResponse.data.googleRating) || 0.0,
-          };
+                .catch(() => ({ data: { averageRating: 0 } })),
+              place.placeId
+                ? axios
+                    .get(
+                      `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/places?placeId=${place.placeId}`
+                    )
+                    .catch(() => ({ data: { googleRating: 0 } }))
+                : Promise.resolve({ data: { googleRating: 0 } }),
+            ]);
+            return {
+              ...place,
+              averageRating: parseFloat(avgResponse.data.averageRating) || 0.0,
+              googleRating: parseFloat(googleResponse.data.googleRating) || 0.0,
+            };
+          } catch (error) {
+            console.warn('Error fetching ratings for place:', place.title);
+            return {
+              ...place,
+              averageRating: 0.0,
+              googleRating: 0.0,
+            };
+          }
         })
       );
 
@@ -224,23 +233,40 @@ export default function MapScreen() {
       let fetchedPlaces = Array.isArray(response.data.places)
         ? response.data.places
         : [];
+
       fetchedPlaces = await Promise.all(
         fetchedPlaces.map(async (place: any) => {
-          const [avgResponse, googleResponse] = await Promise.all([
-            axios.get(
-              `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/ratings?placeId=${place.placeId}`
-            ),
-            place.placeId
-              ? axios.get(
-                  `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/places?placeId=${place.placeId}`
+          try {
+            const [avgResponse, googleResponse] = await Promise.all([
+              axios
+                .get(
+                  `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/ratings?placeId=${place.placeId}`
                 )
-              : Promise.resolve({ data: { googleRating: 0 } }),
-          ]);
-          return {
-            ...place,
-            averageRating: parseFloat(avgResponse.data.averageRating) || 0.0,
-            googleRating: parseFloat(googleResponse.data.googleRating) || 0.0,
-          };
+                .catch(() => ({ data: { averageRating: 0 } })),
+              place.placeId
+                ? axios
+                    .get(
+                      `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/places?placeId=${place.placeId}`
+                    )
+                    .catch(() => ({ data: { googleRating: 0 } }))
+                : Promise.resolve({ data: { googleRating: 0 } }),
+            ]);
+            return {
+              ...place,
+              averageRating: parseFloat(avgResponse.data.averageRating) || 0.0,
+              googleRating: parseFloat(googleResponse.data.googleRating) || 0.0,
+            };
+          } catch (error) {
+            console.warn(
+              'Error fetching ratings for nearby place:',
+              place.title
+            );
+            return {
+              ...place,
+              averageRating: 0.0,
+              googleRating: 0.0,
+            };
+          }
         })
       );
       console.log('Fetched nearby places:', fetchedPlaces);
@@ -266,29 +292,37 @@ export default function MapScreen() {
     }
   }, [filter, fetchPlaces, fetchNearbyPlaces]);
 
-  // Calculate zoom level
   const handleRegionChange = useCallback((region: Region) => {
     const zoom = Math.log2(360 * (width / 256 / region.longitudeDelta)) + 1;
     setZoomLevel(zoom);
   }, []);
 
   let isMarkerPressed = false;
-  // Memoize markers
+
   const markers = useMemo(() => {
-    // Guard against non-array or undefined places
     if (!Array.isArray(places)) {
       console.warn('Places is not an array:', places);
       return [];
     }
     const visiblePlaces = zoomLevel > 15 ? places : places.slice(0, 10);
     return visiblePlaces
-      .filter((place) => place.coordinates) // Ensure coordinates exist
+      .filter((place) => place.coordinates) // Фильтруем только места с координатами
       .map((place) => {
-        const [latitude, longitude] = place.coordinates!.split(',').map(Number);
-        if (isNaN(latitude) || isNaN(longitude)) {
-          console.warn('Invalid coordinates for place:', place);
+        if (!place.coordinates) {
+          console.warn('No coordinates for place:', place.title);
           return null;
         }
+
+        const [latitude, longitude] = place.coordinates.split(',').map(Number);
+        if (isNaN(latitude) || isNaN(longitude)) {
+          console.warn(
+            'Invalid coordinates for place:',
+            place.title,
+            place.coordinates
+          );
+          return null;
+        }
+
         return (
           <Marker
             key={place.id}
@@ -300,7 +334,7 @@ export default function MapScreen() {
               setSelectedPlace(place);
               setTimeout(() => {
                 isMarkerPressed = false;
-              }, 100); // Сбрасываем флаг через 100 мс
+              }, 100);
             }}
             pinColor={theme.colors.primary}
             opacity={zoomLevel > 15 ? 1 : 0.7}
@@ -310,15 +344,16 @@ export default function MapScreen() {
       .filter(Boolean);
   }, [places, zoomLevel, theme.colors.primary]);
 
-  // Navigate to story
+  // Возвращаем к PROD версии навигации к истории
   const handleDetailsPress = useCallback(
     async (place: Place) => {
-      console.log('Details press for place:', place); // Debug
+      console.log('Details press for place:', place);
       try {
+        // Используем PROD endpoint
         const response = await axios.get(
           `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/stories/${place.id}`
         );
-        console.log('Story response:', response.data); // Debug
+        console.log('Story response:', response.data);
         router.push({
           pathname: '/story',
           params: {
@@ -350,12 +385,7 @@ export default function MapScreen() {
         });
       } catch (error: any) {
         console.error('Fetch story error:', error);
-        Alert.alert(
-          t('errorTitle', 'Error'),
-          error.response?.data?.message ||
-            t('errorFetchStory', 'Failed to fetch story.')
-        );
-        // Fallback to place data
+        // Fallback к данным места
         router.push({
           pathname: '/story',
           params: {
@@ -386,10 +416,9 @@ export default function MapScreen() {
     [router, t]
   );
 
-  // Open Google Maps for directions
   const handleDirections = useCallback(
     (place: Place) => {
-      console.log('Directions press for place:', place); // Debug
+      console.log('Directions press for place:', place);
       if (!place.coordinates) {
         Alert.alert(
           t('errorTitle', 'Error'),
@@ -419,7 +448,6 @@ export default function MapScreen() {
     [t]
   );
 
-  // Rest of the component remains unchanged
   return (
     <GestureHandlerRootView style={styles.container}>
       {isLoading && (
@@ -462,9 +490,8 @@ export default function MapScreen() {
             {
               backgroundColor: theme.colors.card || '#ffffff',
               borderColor: theme.colors.border || '#ccc',
-              zIndex: 1000,
-              elevation: 20,
             },
+            animatedCardStyle,
           ]}
         >
           <Text
@@ -545,7 +572,6 @@ export default function MapScreen() {
         </Animated.View>
       )}
 
-      {/* Sidebar and other UI elements remain unchanged */}
       <View style={styles.topBar}>
         <View style={styles.filterBar}>
           <TouchableOpacity
@@ -607,11 +633,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
-    elevation: 10, // Для Android
-    zIndex: 100, // Для iOS
+    elevation: 10,
+    zIndex: 1000,
   },
   ratingText: { fontSize: 14, marginTop: 8 },
-
   placeTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 8 },
   placeDescription: { fontSize: 14, marginBottom: 8 },
   placeFunFact: { fontSize: 14, fontStyle: 'italic', marginBottom: 12 },

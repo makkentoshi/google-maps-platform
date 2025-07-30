@@ -88,7 +88,9 @@ export default function LeaderboardScreen() {
     ) {
       router.push({
         pathname: '/map',
-        params: { coordinates: item.coordinates },
+        params: {
+          coordinates: item.coordinates,
+        },
       });
     } else {
       console.warn(

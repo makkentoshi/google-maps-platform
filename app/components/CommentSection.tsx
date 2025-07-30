@@ -33,7 +33,7 @@ export default function CommentSection({
         setLoading(true);
         try {
           const response = await axios.get(
-            `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/stories/${storyId}/comments`
+            `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/stories/${storyId}/comment`
           );
           setComments(response.data.comments || []);
           setCommentsCount(response.data.comments?.length || 0);

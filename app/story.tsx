@@ -91,13 +91,12 @@ export default function StoryScreen() {
   const params = useLocalSearchParams();
   const { userId } = useAuth();
 
+  // Упрощаем парсинг данных как в PROD версии
   const [storyData, setStoryData] = useState<StoryData | null>(() => {
     if (params.data && typeof params.data === 'string') {
       try {
-        const rawText = params.data as string;
-        const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) throw new Error('No JSON found in the text');
-        return JSON.parse(jsonMatch[0].trim());
+        // Простой парсинг без regex как в PROD версии
+        return JSON.parse(params.data);
       } catch (e) {
         console.error('Failed to parse story data:', e);
         return null;
@@ -105,6 +104,7 @@ export default function StoryScreen() {
     }
     return null;
   });
+
   const [isLiked, setIsLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
   const [commentsCount, setCommentsCount] = useState(0);
@@ -157,7 +157,8 @@ export default function StoryScreen() {
         },
         { headers: { 'x-clerk-user-id': userId } }
       );
-      setStoryData(response.data);
+      console.log('Enhance response:', response.data);
+      setStoryData({ ...response.data, isEnhanced: true });
     } catch (error: any) {
       console.error(
         'Enhance story error:',
@@ -501,6 +502,7 @@ export default function StoryScreen() {
     );
   };
 
+  // Упрощаем Playground tab - убираем AsyncStorage
   const PlaygroundTab = () => {
     const [localStory, setLocalStory] = useState<string | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
@@ -510,21 +512,17 @@ export default function StoryScreen() {
       setIsGenerating(true);
       try {
         const response = await axios.post(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${process.env.GOOGLE_AI_API_KEY}`,
+          `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/enhance-story`,
           {
-            contents: [
-              {
-                parts: [
-                  {
-                    text: `Generate a ${selectedStyle} style story about ${storyData.location}. Original story: ${storyData.story}`,
-                  },
-                ],
-              },
-            ],
-          }
+            placeName: storyData.location,
+            initialText: storyData.story,
+            coordinates: storyData.coordinates,
+            style: selectedStyle,
+          },
+          { headers: { 'x-clerk-user-id': userId } }
         );
-        const generatedText = response.data.candidates[0].content.parts[0].text;
-        setLocalStory(generatedText || 'Generated story unavailable');
+        const generatedStory = response.data.story;
+        setLocalStory(generatedStory);
       } catch (error: any) {
         console.error(
           'Generate story error:',
@@ -537,7 +535,7 @@ export default function StoryScreen() {
       } finally {
         setIsGenerating(false);
       }
-    }, [storyData, selectedStyle, t]);
+    }, [storyData, selectedStyle, t, userId]);
 
     return (
       <ScrollView
