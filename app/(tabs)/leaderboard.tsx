@@ -197,7 +197,7 @@ export default function LeaderboardScreen() {
         ]}
       >
         <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
-          {t('topPlaces', 'Top Places')}
+          {t('topPlaces', '🏆 Top Places')}
         </Text>
         <Text
           style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}

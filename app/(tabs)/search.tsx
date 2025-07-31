@@ -268,7 +268,7 @@ export default function SearchScreen() {
         ]}
       >
         <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
-          {t('search', 'Search')}
+          {t('search', '🔎 Search')}
         </Text>
         <Text
           style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}

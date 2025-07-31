@@ -1,13 +1,14 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Dimensions,
   Image,
   Alert,
+  ActivityIndicator,
+  SafeAreaView,
 } from 'react-native';
 import {
   User as UserIcon,
@@ -18,79 +19,51 @@ import {
   Share2,
   Award,
   Zap,
-  Clock,
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useUser, useAuth } from '@clerk/clerk-expo';
-
-const { width } = Dimensions.get('window');
-
-const mockUser = {
-  name: 'Alexander Petrov',
-  username: '@alex_explorer',
-  level: 5,
-  xp: 1250,
-  nextLevelXP: 1500,
-  joinDate: 'January 2024',
-  visitedPlaces: 45,
-  totalStories: 28,
-  rating: 4.8,
-  achievements: 15,
-  streak: 7,
-};
-
-const recentActivity = [
-  {
-    id: 1,
-    type: 'place_visited',
-    title: 'Visited Christ the Savior Cathedral',
-    time: '1 day ago',
-    xp: 50,
-  },
-  {
-    id: 2,
-    type: 'story_liked',
-    title: 'Story received 10 likes',
-    time: '3 days ago',
-    xp: 25,
-  },
-];
-
-const topAchievements = [
-  {
-    id: 1,
-    title: 'Moscow Explorer',
-    description: 'Visited 50+ places',
-    icon: 'map',
-  },
-  {
-    id: 2,
-    title: 'Storyteller',
-    description: 'Received 100+ likes',
-    icon: 'star',
-  },
-];
+import axios from 'axios';
+import { useFocusEffect, useRouter } from 'expo-router';
 
 export default function ProfileScreen() {
   const { theme } = useTheme();
   const { t } = useLanguage();
-  const { user, isLoaded } = useUser();
-  const { signOut } = useAuth();
+  const { user, isLoaded: isUserLoaded } = useUser();
+  const { signOut, userId } = useAuth();
+  const router = useRouter();
 
-  const displayName =
-    isLoaded && user
-      ? user.fullName || user.username || user.primaryEmailAddress?.emailAddress
-      : mockUser.name;
-  const displayEmail =
-    isLoaded && user
-      ? user.primaryEmailAddress?.emailAddress
-      : mockUser.username;
-  const avatarUrl = isLoaded && user && user.imageUrl ? user.imageUrl : null;
-  const joinDate =
-    isLoaded && user && user.createdAt
-      ? new Date(user.createdAt).toLocaleDateString()
-      : mockUser.joinDate;
+  const [profileData, setProfileData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchProfile = useCallback(async () => {
+    if (!userId) {
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const response = await axios.get(
+        `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/profile`,
+        {
+          headers: { 'x-clerk-user-id': userId },
+        }
+      );
+      setProfileData(response.data);
+    } catch (error) {
+      console.error('Failed to fetch profile:', error);
+      Alert.alert('Error', 'Could not load profile data.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [userId]);
+
+  // useFocusEffect будет вызывать fetchProfile каждый раз, когда экран в фокусе
+  useFocusEffect(
+    useCallback(() => {
+      fetchProfile();
+    }, [fetchProfile])
+  );
 
   const handleSignOut = async () => {
     try {
@@ -100,14 +73,38 @@ export default function ProfileScreen() {
     }
   };
 
-  const progressPercentage = (mockUser.xp / mockUser.nextLevelXP) * 100;
+  if (isLoading || !isUserLoaded) {
+    return (
+      <View
+        style={[
+          styles.container,
+          {
+            justifyContent: 'center',
+            alignItems: 'center',
+            backgroundColor: theme.colors.background,
+          },
+        ]}
+      >
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+      </View>
+    );
+  }
+
+  const displayName = user?.fullName || user?.username || 'User';
+  const avatarUrl = user?.imageUrl || null;
+  const joinDate = user?.createdAt
+    ? new Date(user.createdAt).toLocaleDateString()
+    : '';
+  const progressPercentage =
+    profileData?.nextLevelXP > 0
+      ? (profileData.xp / profileData.nextLevelXP) * 100
+      : 0;
 
   return (
-    <View
+    <SafeAreaView
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
         <View
           style={[styles.header, { backgroundColor: theme.colors.background }]}
         >
@@ -157,7 +154,7 @@ export default function ProfileScreen() {
                 <Text
                   style={[styles.levelText, { color: theme.colors.warning }]}
                 >
-                  {mockUser.level}
+                  {profileData?.level || 1}
                 </Text>
               </View>
             </View>
@@ -165,15 +162,12 @@ export default function ProfileScreen() {
             <Text style={[styles.userName, { color: theme.colors.text }]}>
               {displayName}
             </Text>
-            <Text style={[styles.userHandle, { color: theme.colors.primary }]}>
-              {displayEmail}
-            </Text>
             <View style={styles.joinInfo}>
               <Calendar size={14} color={theme.colors.textSecondary} />
               <Text
                 style={[styles.joinText, { color: theme.colors.textSecondary }]}
               >
-                {t('joinedIn')} {joinDate}
+                {t('joinedIn', 'Joined in')} {joinDate}
               </Text>
             </View>
           </View>
@@ -186,12 +180,12 @@ export default function ProfileScreen() {
           >
             <View style={styles.xpHeader}>
               <Text style={[styles.xpLabel, { color: theme.colors.text }]}>
-                {t('nextLevel')}
+                {t('nextLevel', 'Next Level')}
               </Text>
               <Text
                 style={[styles.xpProgress, { color: theme.colors.primary }]}
               >
-                {mockUser.xp} / {mockUser.nextLevelXP} XP
+                {profileData?.xp || 0} / {profileData?.nextLevelXP || 1} XP
               </Text>
             </View>
             <View
@@ -217,12 +211,11 @@ export default function ProfileScreen() {
             onPress={handleSignOut}
           >
             <Text style={styles.signOutButtonText}>
-              {t('signOut') || 'Sign Out'}
+              {t('signOut', 'Sign Out')}
             </Text>
           </TouchableOpacity>
         </View>
 
-        {/* Stats */}
         <View style={styles.statsContainer}>
           <View
             style={[
@@ -235,12 +228,12 @@ export default function ProfileScreen() {
           >
             <MapPin size={24} color={theme.colors.primary} />
             <Text style={[styles.statNumber, { color: theme.colors.text }]}>
-              {mockUser.visitedPlaces}
+              {profileData?.visitedPlaces || 0}
             </Text>
             <Text
               style={[styles.statLabel, { color: theme.colors.textSecondary }]}
             >
-              {t('places')}
+              {t('places', 'Places')}
             </Text>
           </View>
           <View
@@ -254,12 +247,12 @@ export default function ProfileScreen() {
           >
             <Star size={24} color={theme.colors.success} />
             <Text style={[styles.statNumber, { color: theme.colors.text }]}>
-              {mockUser.totalStories}
+              {profileData?.totalStories || 0}
             </Text>
             <Text
               style={[styles.statLabel, { color: theme.colors.textSecondary }]}
             >
-              {t('stories')}
+              {t('stories', 'Stories')}
             </Text>
           </View>
           <View
@@ -273,170 +266,108 @@ export default function ProfileScreen() {
           >
             <Award size={24} color={theme.colors.error} />
             <Text style={[styles.statNumber, { color: theme.colors.text }]}>
-              {mockUser.achievements}
+              {profileData?.achievements || 0}
             </Text>
             <Text
               style={[styles.statLabel, { color: theme.colors.textSecondary }]}
             >
-              {t('achievements')}
+              {t('achievements', 'Achievements')}
             </Text>
           </View>
         </View>
 
-        {/* Achievements */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-              {t('topAchievements')}
+              {t('quests', 'Quests')}
             </Text>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/quests')}>
               <Text
                 style={[styles.seeAllText, { color: theme.colors.primary }]}
               >
-                {t('all')}
+                {t('all', 'View All')}
               </Text>
             </TouchableOpacity>
           </View>
-
-          {topAchievements.map((achievement) => (
-            <View
-              key={achievement.id}
-              style={[
-                styles.achievementCard,
-                {
-                  backgroundColor: theme.colors.card,
-                  borderColor: theme.colors.border,
-                },
-              ]}
-            >
-              <View
-                style={[
-                  styles.achievementIcon,
-                  { backgroundColor: `${theme.colors.warning}20` },
-                ]}
-              >
-                <Award size={24} color={theme.colors.warning} />
-              </View>
-              <View style={styles.achievementInfo}>
-                <Text
+          {profileData?.quests?.length > 0 ? (
+            profileData.quests.map((quest: any) => {
+              const questProgress = (quest.progress / quest.goal) * 100;
+              return (
+                <View
+                  key={quest.id}
                   style={[
-                    styles.achievementTitle,
-                    { color: theme.colors.text },
+                    styles.achievementCard,
+                    {
+                      backgroundColor: theme.colors.card,
+                      borderColor: theme.colors.border,
+                    },
                   ]}
                 >
-                  {achievement.title}
-                </Text>
-                <Text
-                  style={[
-                    styles.achievementDescription,
-                    { color: theme.colors.textSecondary },
-                  ]}
-                >
-                  {achievement.description}
-                </Text>
-              </View>
-              <View
-                style={[
-                  styles.achievementBadge,
-                  { backgroundColor: `${theme.colors.warning}20` },
-                ]}
-              >
-                <Star size={16} color={theme.colors.warning} />
-              </View>
-            </View>
-          ))}
-        </View>
-
-        {/* Recent Activity */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-              {t('recentActivity')}
-            </Text>
-          </View>
-
-          {recentActivity.map((activity) => (
-            <View
-              key={activity.id}
-              style={[
-                styles.activityCard,
-                {
-                  backgroundColor: theme.colors.card,
-                  borderColor: theme.colors.border,
-                },
-              ]}
-            >
-              <View
-                style={[
-                  styles.activityIcon,
-                  { backgroundColor: theme.colors.surface },
-                ]}
-              >
-                {activity.type === 'place_visited' && (
-                  <MapPin size={20} color={theme.colors.success} />
-                )}
-                {activity.type === 'story_liked' && (
-                  <Star size={20} color={theme.colors.warning} />
-                )}
-              </View>
-              <View style={styles.activityInfo}>
-                <Text
-                  style={[styles.activityTitle, { color: theme.colors.text }]}
-                >
-                  {activity.title}
-                </Text>
-                <View style={styles.activityMeta}>
-                  <Clock size={12} color={theme.colors.textSecondary} />
-                  <Text
+                  <View
                     style={[
-                      styles.activityTime,
-                      { color: theme.colors.textSecondary },
+                      styles.achievementIcon,
+                      { backgroundColor: `${theme.colors.warning}20` },
                     ]}
                   >
-                    {activity.time}
-                  </Text>
+                    <Award size={24} color={theme.colors.warning} />
+                  </View>
+                  <View style={styles.achievementInfo}>
+                    <Text
+                      style={[
+                        styles.achievementTitle,
+                        { color: theme.colors.text },
+                      ]}
+                    >
+                      {quest.title}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.achievementDescription,
+                        { color: theme.colors.textSecondary },
+                      ]}
+                    >
+                      {quest.progress} / {quest.goal}
+                    </Text>
+                    <View
+                      style={[
+                        styles.questProgressBar,
+                        { backgroundColor: theme.colors.border },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.questProgressFill,
+                          {
+                            backgroundColor: theme.colors.warning,
+                            width: `${questProgress}%`,
+                          },
+                        ]}
+                      />
+                    </View>
+                  </View>
+                  {quest.isCompleted && (
+                    <View
+                      style={[
+                        styles.achievementBadge,
+                        { backgroundColor: `${theme.colors.success}20` },
+                      ]}
+                    >
+                      <Star size={16} color={theme.colors.success} />
+                    </View>
+                  )}
                 </View>
-              </View>
-              <View style={styles.activityReward}>
-                <View
-                  style={[
-                    styles.xpBadge,
-                    { backgroundColor: `${theme.colors.warning}20` },
-                  ]}
-                >
-                  <Zap size={12} color={theme.colors.warning} />
-                  <Text
-                    style={[styles.xpText, { color: theme.colors.warning }]}
-                  >
-                    +{activity.xp}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          ))}
-        </View>
-
-        {/* Action Buttons */}
-        <View style={styles.actionsContainer}>
-          <TouchableOpacity
-            style={[
-              styles.actionButton,
-              {
-                backgroundColor: theme.colors.card,
-                borderColor: theme.colors.border,
-              },
-            ]}
-          >
-            <MapPin size={20} color={theme.colors.success} />
+              );
+            })
+          ) : (
             <Text
-              style={[styles.actionButtonText, { color: theme.colors.text }]}
+              style={{ color: theme.colors.textSecondary, textAlign: 'center' }}
             >
-              {t('visitedPlaces')}
+              No active quests.
             </Text>
-          </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -445,10 +376,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    paddingTop: 80, // Increased for status bar
+    paddingTop: 40,
     paddingBottom: 32,
     paddingHorizontal: 20,
-    alignItems: 'center', // Center title
+    alignItems: 'center',
   },
   headerTop: {
     flexDirection: 'row',
@@ -505,11 +436,6 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 4,
-    textAlign: 'center',
-  },
-  userHandle: {
-    fontSize: 16,
-    marginBottom: 12,
     textAlign: 'center',
   },
   joinInfo: {
@@ -614,6 +540,7 @@ const styles = StyleSheet.create({
   },
   achievementDescription: {
     fontSize: 14,
+    marginBottom: 8,
   },
   achievementBadge: {
     width: 32,
@@ -621,70 +548,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  activityCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-  },
-  activityIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  activityInfo: {
-    flex: 1,
-  },
-  activityTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 6,
-  },
-  activityMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  activityTime: {
-    fontSize: 12,
-  },
-  activityReward: {
-    alignItems: 'flex-end',
-  },
-  xpBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  xpText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  actionsContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 32,
-    gap: 12,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-  },
-  actionButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
   },
   signOutButton: {
     marginTop: 20,
@@ -698,5 +561,15 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  questProgressBar: {
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+    width: '100%',
+  },
+  questProgressFill: {
+    height: '100%',
+    borderRadius: 3,
   },
 });

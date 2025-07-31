@@ -44,7 +44,7 @@ const InitialLayout = () => {
         options={{
           headerShown: true, // Показываем шапку
           headerTitle: '', // Но убираем из нее текст "story"
-          headerBackTitle: 'Back', // Убираем текст "< (tabs)"
+          headerBackTitle: '', // Убираем текст "< (tabs)"
           headerTintColor: '#000', // Цвет стрелки "назад" (замените на цвет из темы)
           headerTransparent: true, // Делаем фон шапки прозрачным
           headerShadowVisible: false, // Убираем тень

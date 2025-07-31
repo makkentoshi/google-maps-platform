@@ -17,6 +17,7 @@ import {
   TextInput,
   Image,
   ScrollView,
+  Modal,
 } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -30,6 +31,7 @@ import { Linking } from 'react-native';
 import ClusteredMapView from 'react-native-map-clustering';
 import { StarRating } from '@/app/components/StarRating';
 import { useLocalSearchParams } from 'expo-router';
+import { useAuth } from '@clerk/clerk-expo';
 
 import Animated, {
   useSharedValue,
@@ -90,6 +92,7 @@ export default function MapScreen() {
   const { theme } = useTheme();
   const { t } = useLanguage();
   const router = useRouter();
+  const { userId } = useAuth();
   const [places, setPlaces] = useState<Place[]>([]);
   const [googlePlaces, setGooglePlaces] = useState<GooglePlace[]>([]);
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
@@ -102,6 +105,7 @@ export default function MapScreen() {
   const [filter, setFilter] = useState<
     'popular' | 'recent' | 'historical' | 'nearby'
   >('popular');
+  const [isFilterModalVisible, setFilterModalVisible] = useState(false); // Для модального окна
   const [isLoading, setIsLoading] = useState(true);
   const [zoomLevel, setZoomLevel] = useState(15);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -109,6 +113,7 @@ export default function MapScreen() {
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [searchResults, setSearchResults] = useState<GooglePlace[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+
   const debounceTimeout = useRef<number | null>(null);
 
   // Animation
@@ -274,7 +279,7 @@ export default function MapScreen() {
 
       // ОГРАНИЧЕНИЕ: Не запрашиваем места, если радиус слишком большой (карта отдалена)
       // 10000 метров = 10 км. Можете настроить это значение.
-      if (radius > 10000) {
+      if (radius > 1000) {
         setGooglePlaces([]); // Очищаем маркеры Google, если пользователь слишком отдалил карту
         return;
       }
@@ -307,7 +312,7 @@ export default function MapScreen() {
     setIsLoading(true);
     try {
       const response = await axios.get(
-        `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/places/popular`,
+        `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/places`,
         {
           params: {
             sort: filter === 'recent' ? 'createdAt' : undefined,
@@ -360,7 +365,7 @@ export default function MapScreen() {
     setIsLoading(true);
     try {
       const response = await axios.post(
-        `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/places/nearby-places`,
+        `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/places/places`,
         {
           latitude: userLocation.latitude,
           longitude: userLocation.longitude,
@@ -444,7 +449,7 @@ export default function MapScreen() {
     if (!Array.isArray(places)) {
       return [];
     }
-    const visiblePlaces = zoomLevel > 15 ? places : places.slice(0, 10);
+    const visiblePlaces = places.slice(0, 50);
     return visiblePlaces
       .filter((place) => place.coordinates)
       .map((place) => {
@@ -457,14 +462,28 @@ export default function MapScreen() {
             key={`app-${place.id}`}
             coordinate={{ latitude, longitude }}
             title={place.title}
-            onPress={() => {
-              console.log('[DEBUG] App Marker pressed:', place.title);
-              isMarkerPressed = true;
-              setSelectedPlace(place);
-              setSelectedGooglePlace(null);
-              setTimeout(() => {
-                isMarkerPressed = false;
-              }, 100);
+            onPress={(e) => {
+              if (e.nativeEvent.action === 'marker-press') {
+                setSelectedPlace(place); // Устанавливаем карточку нашего приложения
+
+                // Теперь ищем и устанавливаем карточку Google
+                // Предполагается, что у вашего 'place' есть 'placeId' от Google
+                if (place.placeId) {
+                  // Ищем в уже загруженных googlePlaces или делаем новый запрос
+                  const correspondingGooglePlace = googlePlaces.find(
+                    (gp) => gp.place_id === place.placeId
+                  );
+                  if (correspondingGooglePlace) {
+                    setSelectedGooglePlace(correspondingGooglePlace);
+                  } else {
+                    // Если не нашли, можно сделать детальный запрос к Google
+                    // fetchGooglePlaceDetails(place.placeId).then(setSelectedGooglePlace);
+                    setSelectedGooglePlace(null); // Или просто сбрасываем
+                  }
+                } else {
+                  setSelectedGooglePlace(null); // Если у нашего места нет placeId
+                }
+              }
             }}
             pinColor={theme.colors.primary}
             opacity={1}
@@ -664,13 +683,7 @@ export default function MapScreen() {
 
   return (
     <GestureHandlerRootView style={styles.container}>
-      {isLoading && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-        </View>
-      )}
-
-      {/* Search Bar */}
+      {/* ... (Код Search Bar, Search Results, LoadingOverlay без изменений) ... */}
       <View
         style={[styles.searchContainer, { backgroundColor: theme.colors.card }]}
       >
@@ -697,7 +710,6 @@ export default function MapScreen() {
         {isSearching && <ActivityIndicator color={theme.colors.primary} />}
       </View>
 
-      {/* Search Results */}
       {showSearchResults && (
         <View
           style={[styles.searchResults, { backgroundColor: theme.colors.card }]}
@@ -744,9 +756,6 @@ export default function MapScreen() {
         initialRegion={initialRegion as Region}
         onRegionChangeComplete={handleRegionChange}
         onPress={(e) => {
-          // Новая, надежная проверка.
-          // Мы закрываем карточку, только если нажатие было на саму карту,
-          // а не на маркер.
           if (e.nativeEvent.action !== 'marker-press') {
             setSelectedPlace(null);
             setSelectedGooglePlace(null);
@@ -769,243 +778,242 @@ export default function MapScreen() {
         {googleMarkers}
       </ClusteredMapView>
 
-      {/* App Place Card */}
+      {/* --- НАЧАЛО ИСПРАВЛЕННОЙ ВЕРСТКИ КАРТОЧЕК --- */}
 
+      {/* Карточка приложения */}
       {selectedPlace && (
         <Animated.View
           style={[
             styles.placeCard,
             animatedCardStyle,
             {
-              backgroundColor: theme.colors.card || '#ffffff',
-              borderColor: theme.colors.border || '#ccc',
+              backgroundColor: theme.colors.card,
+              borderColor: theme.colors.border,
             },
           ]}
         >
-          <Text
-            style={[styles.placeTitle, { color: theme.colors.text || '#000' }]}
-          >
-            {selectedPlace.title}
-          </Text>
-
-          {/* Photos */}
-          {selectedPlace.photos && selectedPlace.photos.length > 0 && (
-            <ScrollView
-              horizontal
-              style={styles.photosContainer}
-              showsHorizontalScrollIndicator={false}
-            >
-              {selectedPlace.photos.slice(0, 5).map((photo, index) => (
-                <Image
-                  key={index}
-                  source={{ uri: photo }}
-                  style={styles.placePhoto}
-                  resizeMode="cover"
-                />
-              ))}
-            </ScrollView>
-          )}
-
-          <Text
-            style={[
-              styles.placeDescription,
-              { color: theme.colors.textSecondary || '#666' },
-            ]}
-          >
-            {selectedPlace.description || 'No description available'}
-          </Text>
-
-          {selectedPlace.funFact && (
-            <Text
-              style={[
-                styles.placeFunFact,
-                { color: theme.colors.textSecondary || '#666' },
-              ]}
-            >
-              {t('funFact', 'Fun Fact')}: {selectedPlace.funFact}
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <Text style={[styles.placeTitle, { color: theme.colors.text }]}>
+              {selectedPlace.title}
             </Text>
-          )}
-
-          <StarRating
-            rating={selectedPlace.rating || 0}
-            placeId={selectedPlace.placeId}
-            editable={true}
-            onRatingChange={(newRating) => {
-              setPlaces((prev) =>
-                prev.map((p) =>
-                  p.id === selectedPlace.id ? { ...p, rating: newRating } : p
-                )
-              );
-            }}
-          />
-
-          <Text
-            style={[styles.ratingText, { color: theme.colors.text || '#000' }]}
-          >
-            {t('userRating', 'User Rating')}:{' '}
-            {typeof selectedPlace.averageRating === 'number' &&
-            selectedPlace.averageRating > 0
-              ? selectedPlace.averageRating.toFixed(1)
-              : t('noReviews', 'No reviews')}
-          </Text>
-
-          <Text
-            style={[styles.ratingText, { color: theme.colors.text || '#000' }]}
-          >
-            {t('googleRating', 'Google Rating')}:{' '}
-            {typeof selectedPlace.googleRating === 'number' &&
-            selectedPlace.googleRating > 0
-              ? selectedPlace.googleRating.toFixed(1)
-              : t('noReviews', 'No reviews')}
-          </Text>
-
-          <View style={styles.placeCardButtons}>
-            <TouchableOpacity
-              style={[
-                styles.cardButton,
-                { backgroundColor: theme.colors.primary || '#007bff' },
-              ]}
-              onPress={() => handleDetailsPress(selectedPlace)}
-            >
-              <Text style={styles.cardButtonText}>
-                {t('details', 'Details')}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.cardButton,
-                { backgroundColor: theme.colors.primary || '#007bff' },
-              ]}
-              onPress={() => handleDirections(selectedPlace)}
-            >
-              <Text style={styles.cardButtonText}>
-                {t('directions', 'Directions')}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </Animated.View>
-      )}
-
-      {/* Google Place Card */}
-      {selectedGooglePlace && (
-        <Animated.View
-          style={[
-            styles.placeCard,
-            animatedCardStyle,
-            {
-              backgroundColor: theme.colors.card || '#ffffff',
-              borderColor: '#4285F4',
-              borderWidth: 2,
-            },
-          ]}
-        >
-          <Text
-            style={[styles.placeTitle, { color: theme.colors.text || '#000' }]}
-          >
-            {selectedGooglePlace.name}
-          </Text>
-
-          {/* Google Photos */}
-          {selectedGooglePlace.photos &&
-            selectedGooglePlace.photos.length > 0 && (
+            {selectedPlace.photos && selectedPlace.photos.length > 0 && (
               <ScrollView
                 horizontal
                 style={styles.photosContainer}
                 showsHorizontalScrollIndicator={false}
               >
-                {selectedGooglePlace.photos.slice(0, 5).map((photo, index) => (
+                {selectedPlace.photos.slice(0, 5).map((photo, index) => (
                   <Image
                     key={index}
-                    source={{ uri: getPhotoUrl(photo.photo_reference) }}
+                    source={{ uri: photo }}
                     style={styles.placePhoto}
                     resizeMode="cover"
                   />
                 ))}
               </ScrollView>
             )}
-
-          <Text
-            style={[
-              styles.placeDescription,
-              { color: theme.colors.textSecondary || '#666' },
-            ]}
-          >
-            {selectedGooglePlace.formatted_address || 'Google Place'}
-          </Text>
-
-          <Text
-            style={[styles.ratingText, { color: theme.colors.text || '#000' }]}
-          >
-            {t('googleRating', 'Google Rating')}:{' '}
-            {selectedGooglePlace.rating
-              ? selectedGooglePlace.rating.toFixed(1)
-              : t('noReviews', 'No reviews')}
-          </Text>
-
-          <View style={styles.placeCardButtons}>
-            <TouchableOpacity
-              style={[styles.cardButton, { backgroundColor: '#4285F4' }]}
-              onPress={() => handleDirections(selectedGooglePlace)}
-            >
-              <Text style={styles.cardButtonText}>
-                {t('directions', 'Directions')}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
+            <Text
               style={[
-                styles.cardButton,
-                { backgroundColor: theme.colors.surface || '#f0f0f0' },
+                styles.placeDescription,
+                { color: theme.colors.textSecondary },
               ]}
-              onPress={() => {
-                setSelectedGooglePlace(null);
-                Alert.alert(
-                  t('addPlace', 'Add Place'),
-                  t(
-                    'addPlaceMessage',
-                    'Would you like to add this place to our app by taking a photo?'
-                  ),
-                  [
-                    { text: t('cancel', 'Cancel'), style: 'cancel' },
-                    {
-                      text: t('addPhoto', 'Add Photo'),
-                      onPress: () => {
-                        // Navigate to camera or photo picker
-                        router.push('/');
-                      },
-                    },
-                  ]
+            >
+              {selectedPlace.description || 'No description available'}
+            </Text>
+            {selectedPlace.funFact && (
+              <Text
+                style={[
+                  styles.placeFunFact,
+                  { color: theme.colors.textSecondary },
+                ]}
+              >
+                {t('funFact', 'Fun Fact')}: {selectedPlace.funFact}
+              </Text>
+            )}
+            <StarRating
+              rating={selectedPlace.rating || 0}
+              placeId={selectedPlace.placeId!}
+              editable={true}
+              userId={userId || null}
+              onRatingChange={(newRating) => {
+                setPlaces((prev) =>
+                  prev.map((p) =>
+                    p.id === selectedPlace.id ? { ...p, rating: newRating } : p
+                  )
                 );
               }}
-            >
-              <Text
-                style={[styles.cardButtonText, { color: theme.colors.text }]}
+            />
+            <Text style={[styles.ratingText, { color: theme.colors.text }]}>
+              {t('userRating', 'User Rating')}:{' '}
+              {typeof selectedPlace.averageRating === 'number' &&
+              selectedPlace.averageRating > 0
+                ? selectedPlace.averageRating.toFixed(1)
+                : t('noReviews', 'No reviews')}
+            </Text>
+            <Text style={[styles.ratingText, { color: theme.colors.text }]}>
+              {t('googleRating', 'Google Rating')}:{' '}
+              {typeof selectedPlace.googleRating === 'number' &&
+              selectedPlace.googleRating > 0
+                ? selectedPlace.googleRating.toFixed(1)
+                : t('noReviews', 'No reviews')}
+            </Text>
+            <View style={styles.placeCardButtons}>
+              <TouchableOpacity
+                style={[
+                  styles.cardButton,
+                  { backgroundColor: theme.colors.primary },
+                ]}
+                onPress={() => handleDetailsPress(selectedPlace)}
               >
-                {t('addToApp', 'Add to App')}
-              </Text>
-            </TouchableOpacity>
-          </View>
+                <Text style={styles.cardButtonText}>
+                  {t('details', 'Details')}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.cardButton,
+                  { backgroundColor: theme.colors.primary },
+                ]}
+                onPress={() => handleDirections(selectedPlace)}
+              >
+                <Text style={styles.cardButtonText}>
+                  {t('directions', 'Directions')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
         </Animated.View>
       )}
 
-      {/* Filter Button */}
+      {/* Карточка Google */}
+      {selectedGooglePlace && (
+        <Animated.View
+          style={[
+            styles.placeCard,
+            animatedCardStyle,
+            {
+              backgroundColor: theme.colors.card,
+              borderColor: '#4285F4',
+              borderWidth: 2,
+            },
+          ]}
+        >
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <Text style={[styles.placeTitle, { color: theme.colors.text }]}>
+              {selectedGooglePlace.name}
+            </Text>
+            {selectedGooglePlace.photos &&
+              selectedGooglePlace.photos.length > 0 && (
+                <ScrollView
+                  horizontal
+                  style={styles.photosContainer}
+                  showsHorizontalScrollIndicator={false}
+                >
+                  {selectedGooglePlace.photos
+                    .slice(0, 5)
+                    .map((photo, index) => (
+                      <Image
+                        key={index}
+                        source={{ uri: getPhotoUrl(photo.photo_reference) }}
+                        style={styles.placePhoto}
+                        resizeMode="cover"
+                      />
+                    ))}
+                </ScrollView>
+              )}
+            <Text
+              style={[
+                styles.placeDescription,
+                { color: theme.colors.textSecondary },
+              ]}
+            >
+              {selectedGooglePlace.formatted_address || 'Google Place'}
+            </Text>
+            <Text style={[styles.ratingText, { color: theme.colors.text }]}>
+              {t('googleRating', 'Google Rating')}:{' '}
+              {selectedGooglePlace.rating
+                ? selectedGooglePlace.rating.toFixed(1)
+                : t('noReviews', 'No reviews')}
+            </Text>
+            <View style={styles.placeCardButtons}>
+              <TouchableOpacity
+                style={[styles.cardButton, { backgroundColor: '#4285F4' }]}
+                onPress={() => handleDirections(selectedGooglePlace)}
+              >
+                <Text style={styles.cardButtonText}>
+                  {t('directions', 'Directions')}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.cardButton,
+                  { backgroundColor: theme.colors.surface },
+                ]}
+                onPress={() => {
+                  /* ... */
+                }}
+              >
+                <Text
+                  style={[styles.cardButtonText, { color: theme.colors.text }]}
+                >
+                  {t('addToApp', 'Add to App')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </Animated.View>
+      )}
+
+      {/* --- КОНЕЦ ИСПРАВЛЕННОЙ ВЕРСТКИ КАРТОЧЕК --- */}
+
+      {/* Filter Button and Modal */}
       <View style={styles.topBar}>
-        <View style={styles.filterBar}>
-          <TouchableOpacity
-            style={[
-              styles.filterButton,
-              { backgroundColor: theme.colors.card },
-            ]}
-            onPress={() => setSidebarOpen(true)}
-          >
-            <Filter size={24} color={theme.colors.text} />
-          </TouchableOpacity>
-          {isLoading && <ActivityIndicator color={theme.colors.primary} />}
-        </View>
+        <TouchableOpacity
+          style={[styles.filterButton, { backgroundColor: theme.colors.card }]}
+          onPress={() => setFilterModalVisible(true)}
+        >
+          <Filter size={24} color={theme.colors.text} />
+        </TouchableOpacity>
+        {isLoading && <ActivityIndicator color={theme.colors.primary} />}
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={isFilterModalVisible}
+          onRequestClose={() => setFilterModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View
+              style={[
+                styles.modalContent,
+                { backgroundColor: theme.colors.card },
+              ]}
+            >
+              <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
+                Select Filter
+              </Text>
+              {['popular', 'recent', 'historical'].map((filterName) => (
+                <TouchableOpacity
+                  key={filterName}
+                  style={styles.filterOption}
+                  onPress={() => {
+                    setFilter(filterName as any);
+                    setFilterModalVisible(false);
+                  }}
+                >
+                  <Text style={{ color: theme.colors.text, fontSize: 18 }}>
+                    {filterName.charAt(0).toUpperCase() + filterName.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </Modal>
       </View>
     </GestureHandlerRootView>
   );
 }
 
+// --- ИСПРАВЛЕННЫЕ СТИЛИ ---
 const styles = StyleSheet.create({
   container: { flex: 1 },
   map: { flex: 1, width: '100%', height: '100%' },
@@ -1089,7 +1097,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 998,
   },
-  filterBar: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   filterButton: {
     padding: 10,
     borderRadius: 8,
@@ -1099,6 +1106,7 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 3,
   },
+  // Оригинальный стиль для полноразмерной карточки
   placeCard: {
     position: 'absolute',
     bottom: 20,
@@ -1162,5 +1170,29 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
     fontSize: 14,
+  },
+  // Стили для модального окна фильтра
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalContent: {
+    width: '80%',
+    padding: 20,
+    backgroundColor: 'white',
+    borderRadius: 12,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  filterOption: {
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
   },
 });

@@ -72,6 +72,7 @@ type StoryData = {
   sources?: string[];
   isEnhanced?: boolean;
   photos?: string[];
+  id?: string; // For database stories
 };
 
 type MyRoute = Route & {
@@ -114,6 +115,7 @@ export default function StoryScreen() {
   const [isCommentModalVisible, setCommentModalVisible] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [isEnhancing, setIsEnhancing] = useState(false);
+
   const [isPlayingTts, setIsPlayingTts] = useState(false);
   const [selectedStyle, setSelectedStyle] = useState('narrative');
   const [showLikeAnimation, setShowLikeAnimation] = useState(false);
@@ -251,7 +253,12 @@ export default function StoryScreen() {
   };
 
   const handleLike = async () => {
-    if (storyData?.source !== 'database' || !storyData.storyId) {
+    console.log(
+      '[DEBUG] Попытка лайка. Данные истории:',
+      JSON.stringify(storyData, null, 2)
+    );
+    const storyId = storyData?.id || storyData?.storyId;
+    if (storyData?.source !== 'database' || !storyId) {
       Alert.alert(
         t('errorTitle', 'Error'),
         t('errorLikeUpdate', 'Cannot like this story.')
@@ -274,7 +281,7 @@ export default function StoryScreen() {
     try {
       const response = await axios({
         method: originalLiked ? 'DELETE' : 'POST',
-        url: `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/stories/${storyData.storyId}/like`,
+        url: `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/stories/${storyId}/like`,
         data: { userClerkId: userId },
         headers: {
           'x-clerk-user-id': userId,
@@ -303,7 +310,8 @@ export default function StoryScreen() {
   };
 
   const handlePostComment = async () => {
-    if (!storyData || storyData.source !== 'database' || !storyData.storyId) {
+    const storyId = storyData?.id || storyData?.storyId;
+    if (storyData?.source !== 'database' || !storyId) {
       Alert.alert(
         t('errorTitle', 'Error'),
         t('errorComment', 'Cannot post comment.')
@@ -329,7 +337,7 @@ export default function StoryScreen() {
 
     try {
       await axios.post(
-        `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/stories/${storyData.storyId}/comment`,
+        `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/stories/${storyId}/comment`,
         { userClerkId: userId, text: commentText },
         {
           headers: {
@@ -633,8 +641,11 @@ export default function StoryScreen() {
   };
 
   const PlaygroundTab = () => {
+    /* */
     const [localStory, setLocalStory] = useState<string | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
+    const storyStyles = ['narrative', 'fairy_tale', 'business'];
+    /* */
 
     const handleGenerateStory = useCallback(async () => {
       if (!storyData) return;
@@ -682,12 +693,27 @@ export default function StoryScreen() {
       }
     }, [storyData, selectedStyle, t, userId]);
 
+    const handleCopyText = () => {
+      if (localStory) {
+        // Clipboard.setString(localStory); // Для этого нужен import { Clipboard } from 'react-native';
+        Alert.alert(
+          t('copied', 'Copied!'),
+          t(
+            'storyCopied',
+            'The generated story has been copied to your clipboard.'
+          )
+        );
+      }
+    };
+
     return (
-      <ScrollView
-        style={[styles.container, { backgroundColor: theme.colors.background }]}
-        contentContainerStyle={styles.playgroundContent}
+      <View
+        style={[
+          styles.playgroundContainer,
+          { backgroundColor: theme.colors.background },
+        ]}
       >
-        <View style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.playgroundScrollContent}>
           {!storyData?.isEnhanced && (
             <>
               <TouchableOpacity
@@ -713,21 +739,81 @@ export default function StoryScreen() {
             <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
               ✍️ {t('textStyle', 'Text Style')}
             </Text>
-            <Picker
-              selectedValue={selectedStyle}
-              style={[styles.picker, { color: theme.colors.text }]}
-              onValueChange={(itemValue) => setSelectedStyle(itemValue)}
-            >
-              <Picker.Item label="📜 Narrative" value="narrative" />
-              <Picker.Item label="🧚 Fairy Tale" value="fairy_tale" />
-              <Picker.Item label="💼 Business" value="business" />
-            </Picker>
+            {/* --- НАЧАЛО ИЗМЕНЕНИЙ: КНОПКИ ВМЕСТО PICKER --- */}
+            <View style={styles.styleButtonsContainer}>
+              {storyStyles.map((style) => (
+                <TouchableOpacity
+                  key={style}
+                  style={[
+                    styles.styleButton,
+                    {
+                      backgroundColor:
+                        selectedStyle === style
+                          ? theme.colors.primary
+                          : theme.colors.surface,
+                    },
+                  ]}
+                  onPress={() => setSelectedStyle(style)}
+                >
+                  <Text
+                    style={[
+                      styles.styleButtonText,
+                      {
+                        color:
+                          selectedStyle === style
+                            ? '#FFFFFF'
+                            : theme.colors.text,
+                      },
+                    ]}
+                  >
+                    {style.charAt(0).toUpperCase() +
+                      style.slice(1).replace('_', ' ')}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
 
+          {localStory && (
+            <View style={styles.generatedStory}>
+              <View style={styles.generatedStoryHeader}>
+                <Text
+                  style={[
+                    styles.sectionTitle,
+                    { color: theme.colors.text, marginBottom: 0 },
+                  ]}
+                >
+                  📖 {t('generatedStory', 'Generated Story')}
+                </Text>
+                {/* --- НАЧАЛО ИЗМЕНЕНИЙ: КНОПКА КОПИРОВАТЬ --- */}
+                <TouchableOpacity
+                  onPress={handleCopyText}
+                  style={styles.copyButton}
+                >
+                  <Text style={{ color: theme.colors.primary }}>
+                    {t('copy', 'Copy')}
+                  </Text>
+                </TouchableOpacity>
+                {/* --- КОНЕЦ ИЗМЕНЕНИЙ --- */}
+              </View>
+              <Text
+                style={[
+                  styles.storyContent,
+                  { color: theme.colors.text, marginTop: 16 },
+                ]}
+              >
+                {localStory}
+              </Text>
+            </View>
+          )}
+        </ScrollView>
+
+        {/* Этот блок теперь находится вне ScrollView и будет прижат к низу */}
+        <View style={styles.bottomActionsContainer}>
           <TouchableOpacity
             style={[
               styles.enhanceButton,
-              { backgroundColor: theme.colors.primary, marginTop: 20 },
+              { backgroundColor: theme.colors.primary, marginBottom: 10 }, // Убрали верхний отступ, добавили нижний
             ]}
             onPress={handleGenerateStory}
             disabled={isGenerating}
@@ -736,35 +822,26 @@ export default function StoryScreen() {
               ✨ {t('generateStory', 'Generate Story')}
             </Text>
           </TouchableOpacity>
-          {localStory && (
-            <View style={styles.generatedStory}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-                📖 {t('generatedStory', 'Generated Story')}
-              </Text>
-              <Text style={[styles.storyContent, { color: theme.colors.text }]}>
-                {localStory}
-              </Text>
-            </View>
-          )}
+          <TouchableOpacity style={styles.ttsButton} onPress={handleTts}>
+            {isPlayingTts ? (
+              <Pause size={20} color={theme.colors.text} />
+            ) : (
+              <Play size={20} color={theme.colors.text} />
+            )}
+            <Text style={[styles.buttonText, { color: theme.colors.text }]}>
+              {isPlayingTts
+                ? `⏸️ ${t('pauseStory', 'Pause Story')}`
+                : `▶️ ${t('playStory', 'Play Story')}`}
+            </Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.ttsButton} onPress={handleTts}>
-          {isPlayingTts ? (
-            <Pause size={20} color={theme.colors.text} />
-          ) : (
-            <Play size={20} color={theme.colors.text} />
-          )}
-          <Text style={[styles.buttonText, { color: theme.colors.text }]}>
-            {isPlayingTts
-              ? `⏸️ ${t('pauseStory', 'Pause Story')}`
-              : `▶️ ${t('playStory', 'Play Story')}`}
-          </Text>
-        </TouchableOpacity>
+
         {isGenerating && (
           <View style={styles.loaderContainer}>
             <TextGenerationLoader visible={isGenerating} />
           </View>
         )}
-      </ScrollView>
+      </View>
     );
   };
 
@@ -1090,9 +1167,22 @@ const styles = StyleSheet.create({
   },
   interactionText: { fontSize: 14, fontWeight: '600' },
   playgroundContent: {
-    flexGrow: 1, // Это заставит контейнер занимать всю высоту ScrollView
     padding: 20,
     paddingTop: 0,
+  },
+  playgroundContainer: {
+    flex: 1, // Занимает все доступное пространство таба
+  },
+  playgroundScrollContent: {
+    padding: 20,
+    paddingBottom: 10, // Уменьшаем нижний отступ, т.к. кнопки теперь отдельно
+  },
+  bottomActionsContainer: {
+    padding: 20,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#ccc',
+    backgroundColor: 'transparent',
   },
   stylePicker: {
     marginBottom: 20,
@@ -1103,6 +1193,28 @@ const styles = StyleSheet.create({
     color: '#000',
     backgroundColor: '#fff',
     borderRadius: 8,
+  },
+  styleButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  styleButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  styleButtonText: {
+    fontWeight: '600',
+  },
+  generatedStoryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  copyButton: {
+    padding: 8,
   },
   enhanceButton: {
     paddingVertical: 16,

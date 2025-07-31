@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { Star } from 'lucide-react-native';
 import axios from 'axios';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -8,6 +8,7 @@ type StarRatingProps = {
   rating: number;
   editable?: boolean;
   placeId: string;
+  userId: string | null; // <-- ДОБАВЛЕНО
   onRatingChange?: (rating: number) => void;
 };
 
@@ -15,6 +16,7 @@ export const StarRating: React.FC<StarRatingProps> = ({
   rating,
   editable = false,
   placeId,
+  userId,
   onRatingChange,
 }) => {
   const { theme } = useTheme();
@@ -22,12 +24,24 @@ export const StarRating: React.FC<StarRatingProps> = ({
 
   const handleRatingPress = async (newRating: number) => {
     if (!editable) return;
+
+    if (!userId) {
+      Alert.alert('Error', 'You must be logged in to rate places.');
+      return;
+    }
+
     setTempRating(newRating);
     try {
-      await axios.post(`${process.env.EXPO_PUBLIC_API_BASE_URL}/api/ratings`, {
-        placeId,
-        rating: newRating,
-      });
+      // --- НАЧАЛО ИЗМЕНЕНИЙ ---
+      await axios.post(
+        `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/ratings?placeId=${placeId}`,   // ratings 
+        { value: newRating }, 
+        {
+          headers: {
+            'x-clerk-user-id': userId, 
+          },
+        }
+      );
       if (onRatingChange) onRatingChange(newRating);
     } catch (error: any) {
       console.error('Error submitting rating:', error);
